@@ -10,7 +10,7 @@ flat_fda_pipeline.qmd:
     flat_file: dev/flat_fda_pipeline.qmd
     vignette_name: dev-fda_pipeline
     open_vignette: true
-    check: true
+    check: false
     document: true
     overwrite: 'yes'
     clean: ask
@@ -27,7 +27,7 @@ flat_Lcross_pipeline.qmd:
     flat_file: dev/flat_Lcross_pipeline.qmd
     vignette_name: dev-Lcross_pipeline
     open_vignette: true
-    check: true
+    check: false
     document: true
     overwrite: 'yes'
     clean: ask

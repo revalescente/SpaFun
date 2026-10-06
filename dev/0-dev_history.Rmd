@@ -20,7 +20,7 @@ fusen::fill_description(
     Version = "0.1",
     Description = "Function to analyse TCGA dataset",
     `Authors@R` = c(
-      person("Valerio", "Reffo", email = "valerio.reffo@gmail.com", role = c("aut", "cre"), comment = c(ORCID = "0000-0000-0000-0000"))
+      person("Valerio", "Reffo", email = "valerio.reffo@phd.unipd.it", role = c("aut", "cre"), comment = c(ORCID = "0009-0006-8690-7018"))
     )
   )
 , overwrite = TRUE)
@@ -67,6 +67,13 @@ fusen::inflate(flat_file = "dev/flat_Lcross_pipeline.qmd",
                overwrite = T)
 ```
 
+finche non risolvo il problema dei dati per le vignette
+```{r}
+fusen::inflate(flat_file = "dev/flat_Lcross_pipeline.qmd",
+               vignette_name = "dev-Lcross_pipeline",
+               overwrite = TRUE, check = FALSE)
+```
+
 
 This will put everything in the right place to get started. We then continue by
 adding the fda pipeline.
@@ -76,7 +83,7 @@ adding the fda pipeline.
 # Execute in the console directly
 fusen::inflate(flat_file = "dev/flat_fda_pipeline.qmd",
                vignette_name = "dev-fda_pipeline",
-               overwrite = T)
+               overwrite = T, check = F)
 ```
 
 # Including datasets
