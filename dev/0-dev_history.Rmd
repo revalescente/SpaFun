@@ -53,6 +53,12 @@ usethis::use_code_of_conduct("contact@fake.com")
 usethis::use_news_md()
 ```
 
+claude suggerisce
+```{r}
+devtools::build_readme()
+```
+
+
 **From now, you will need to "inflate" your package at least once to be able to use the following commands. Let's go to your flat template, and come back here later if/when needed.**
 
 # Inflate flat_Lcross_pipeline.Rmd
