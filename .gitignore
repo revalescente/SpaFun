@@ -1,8 +1,31 @@
-.Rproj.user
+# R / RStudio / Positron
+.Rproj.user/
 .Rhistory
 .RData
-.DS_Store
+.Ruserdata
 .httr-oauth
-inst/doc
+*.Rproj
+.positai/
 
+# renv: si versionano solo renv.lock e renv/activate.R
+renv/library/
+renv/local/
+renv/cellar/
+renv/lock/
+renv/python/
+renv/sandbox/
+renv/staging/
+
+# build del pacchetto e pkgdown
 docs/
+inst/doc
+*.tar.gz
+*.Rcheck/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# sistema / editor
+.DS_Store
+.vscode/
+.claude/
