@@ -1,0 +1,565 @@
+---
+title: "Lettura dei dati"
+author: "Valerio Reffo"
+format: html
+---
+
+```{r}
+#| label: development
+#| include: FALSE
+
+library(testthat)
+```
+
+# Data reading
+
+Reading is divided in two levels: `read_cells_h5ad()` read the file and return a `data.frame`, `cells2ppp()` build the point pattern. So `cells2ppp()` can be tested with simulated data and use with data coming from other sources.
+`ann2ppp()` calls both.
+
+## read_cells_h5ad
+
+Read an AnnData (`.h5ad` o `.h5ad.gz`) and return a table with a cell for each row: coords `x`, `y` and the `mark` label. It need Bioconductor `anndataR`, which is in `Suggests`.
+
+It return an error if the label column o the matrix of the coords don't exist, and return the available columns.
+
+```{r}
+#| label: function-read_cells_h5ad
+
+#' Read cell centroids and labels from an h5ad file
+#'
+#' Reads an AnnData file (`.h5ad`, optionally gzip-compressed `.h5ad.gz`)
+#' and returns one row per cell with its coordinates and its label (for
+#' example the cell type). Requires the Bioconductor package `anndataR`.
+#'
+#' @param data_path Path to the `.h5ad` or `.h5ad.gz` file.
+#' @param marks_col Name of the `obs` column with the cell labels, or `NULL`
+#'   to read coordinates only.
+#' @param spatial_key Name of the `obsm` matrix with the coordinates (first
+#'   column x, second column y). Ignored if `coords_cols` is given.
+#' @param coords_cols Optional: names of two `obs` columns holding x and y,
+#'   to use instead of `obsm[[spatial_key]]`.
+#'
+#' @return A `data.frame` with columns `x`, `y` and, if `marks_col` is not
+#'   `NULL`, `mark` (a factor). Row names are the cell ids (`obs_names`).
+#' @export
+#' @examples
+read_cells_h5ad <- function(data_path, marks_col = "type",
+                            spatial_key = "spatial", coords_cols = NULL) {
+  if (!requireNamespace("anndataR", quietly = TRUE)) {
+    stop("Package 'anndataR' is needed to read h5ad files. Install it with ",
+         "BiocManager::install(\"anndataR\").", call. = FALSE)
+  }
+  if (!is.character(data_path) || length(data_path) != 1 ||
+      !file.exists(data_path)) {
+    stop("`data_path` must be the path of an existing file.", call. = FALSE)
+  }
+
+  # decompress only if the file really is gzip: some ".h5ad.gz" files are
+  # plain HDF5 with a misleading extension
+  if (.is_gzip(data_path)) {
+    tmp <- .gunzip_tmp(data_path)
+    on.exit(unlink(tmp), add = TRUE)
+    data_path <- tmp
+  }
+  ann <- anndataR::read_h5ad(data_path)
+  obs <- as.data.frame(ann$obs)
+
+  # coordinates
+  if (!is.null(coords_cols)) {
+    if (length(coords_cols) != 2 || !all(coords_cols %in% names(obs))) {
+      stop("`coords_cols` must be two column names of obs. Available: ",
+           paste(names(obs), collapse = ", "), call. = FALSE)
+    }
+    xy <- cbind(obs[[coords_cols[1]]], obs[[coords_cols[2]]])
+  } else {
+    obsm <- ann$obsm
+    if (is.null(obsm) || !spatial_key %in% names(obsm)) {
+      stop("obsm has no matrix called '", spatial_key, "'. Available: ",
+           paste(names(obsm), collapse = ", "),
+           ". Set `spatial_key` or `coords_cols`.", call. = FALSE)
+    }
+    xy <- as.matrix(obsm[[spatial_key]])
+    if (ncol(xy) < 2) {
+      stop("obsm[['", spatial_key, "']] must have at least 2 columns.",
+           call. = FALSE)
+    }
+  }
+
+  cells <- data.frame(x = as.numeric(xy[, 1]), y = as.numeric(xy[, 2]))
+
+  # labels
+  if (!is.null(marks_col)) {
+    if (!marks_col %in% names(obs)) {
+      stop("Column '", marks_col, "' not found in obs. Available: ",
+           paste(names(obs), collapse = ", "), call. = FALSE)
+    }
+    cells$mark <- as.factor(obs[[marks_col]])
+  }
+
+  ids <- tryCatch(ann$obs_names, error = function(e) NULL)
+  if (length(ids) == nrow(cells)) rownames(cells) <- ids
+  cells
+}
+```
+
+```{r}
+#| label: examples-read_cells_h5ad
+
+f <- system.file("extdata", "tcga_tiny.h5ad", package = "SpaFun")
+if (nzchar(f) && requireNamespace("anndataR", quietly = TRUE)) {
+  cells <- read_cells_h5ad(f, marks_col = "type")
+  head(cells)
+  table(cells$mark)
+}
+```
+
+```{r}
+#| label: tests-read_cells_h5ad
+
+library(spatstat.geom)
+
+sim_cells <- function(n = 400, size = 320) {
+  data.frame(
+    x = runif(n, 0, size), y = runif(n, 0, size),
+    mark = factor(sample(c("tumor", "stroma"), n, replace = TRUE))
+  )
+}
+
+write_mask <- function(m, ...) {
+  f <- tempfile(fileext = ".png")
+  png::writePNG(m, f, ...)
+  f
+}
+
+test_that("read_cells_h5ad and ann2ppp read h5ad and h5ad.gz", {
+  skip_if_not_installed("anndataR")
+  skip_if_not_installed("rhdf5")
+  set.seed(4)
+  n <- 30
+  obs <- data.frame(type = sample(c("tumor", "stroma"), n, replace = TRUE),
+                    cx = runif(n, 0, 100), cy = runif(n, 0, 100),
+                    row.names = paste0("cell", seq_len(n)))
+  ad <- anndataR::AnnData(
+    obs = obs,
+    var = data.frame(row.names = "g1"),
+    X = matrix(0, n, 1),
+    obsm = list(spatial = as.matrix(obs[, c("cx", "cy")]))
+  )
+  f <- tempfile(fileext = ".h5ad")
+  anndataR::write_h5ad(ad, f)
+
+  cells <- read_cells_h5ad(f)
+  expect_equal(nrow(cells), n)
+  expect_equal(cells$x, obs$cx)
+  expect_equal(as.character(cells$mark), obs$type)
+
+  expect_equal(read_cells_h5ad(f, coords_cols = c("cx", "cy"))$y, obs$cy)
+  expect_error(read_cells_h5ad(f, marks_col = "celltype"), "not found")
+  expect_error(read_cells_h5ad(f, spatial_key = "X_umap"), "obsm")
+
+  # gzip-compressed file
+  gz <- paste0(f, ".gz")
+  con <- gzfile(gz, "wb"); writeBin(readBin(f, "raw", file.size(f)), con)
+  close(con)
+  pp <- ann2ppp(gz)
+  expect_s3_class(pp, "ppp")
+  expect_equal(npoints(pp), n)
+
+  # uncompressed HDF5 with a ".gz" name (as in the TCGA files)
+  fake_gz <- paste0(tempfile(), ".h5ad.gz")
+  file.copy(f, fake_gz)
+  expect_equal(nrow(read_cells_h5ad(fake_gz)), n)
+  expect_null(marks(ann2ppp(f, marks_col = NULL)))
+})
+
+test_that("the example TCGA h5ad is read with the right scale", {
+  skip_if_not_installed("anndataR")
+  f <- system.file("extdata", "tcga_tiny.h5ad", package = "SpaFun")
+  mask <- system.file("extdata", "tcga_tiny_mask.png", package = "SpaFun")
+  skip_if(!nzchar(f) || !nzchar(mask), "example files not installed")
+  cells <- read_cells_h5ad(f)
+  expect_gt(nrow(cells), 100)
+  expect_true("neoplastic" %in% levels(cells$mark))
+  pp <- suppressMessages(ann2ppp(f, mask = mask, magnif = 40))
+  # with the right scale and orientation almost no cell falls outside
+  expect_lt(attr(pp, "n_removed")[["outside_window"]], 0.01 * nrow(cells))
+})
+
+test_that("read_cells_h5ad checks the path", {
+  skip_if_not_installed("anndataR")
+  expect_error(read_cells_h5ad("does_not_exist.h5ad"), "existing file")
+})
+```
+
+## cells2ppp
+
+Trasforma la tabella delle cellule in un `ppp`. La finestra è il rettangolo che contiene le cellule, oppure una maschera del tessuto: un PNG (la miniatura del vetrino) o un `owin`.
+
+La scala tra maschera e coordinate si dà con `mask_scale` (unità per pixel) oppure con `magnif / thumb_mag`, ad esempio 40 / 1.25 = 32. Le cellule fuori dalla finestra vengono scartate con un messaggio, e il loro numero resta nell'attributo `"n_removed"`: se è alto, probabilmente la scala è sbagliata.
+
+```{r}
+#| label: function-cells2ppp
+
+#' Build a point pattern from a table of cells
+#'
+#' Turns a table of cell centroids into a `spatstat` point pattern. The
+#' window is either the bounding box of the cells or a tissue mask, given as
+#' a PNG file (a thumbnail of the slide) or as an `owin`.
+#'
+#' Coordinates and mask must use the same orientation: with a PNG the first
+#' pixel row is the top of the image, as with centroids in image coordinates
+#' (y growing downwards).
+#'
+#' @param cells A `data.frame` with the coordinates and, optionally, the
+#'   labels of the cells, e.g. the output of [read_cells_h5ad()].
+#' @param mask Optional tissue mask: path to a PNG file or an `owin`. If
+#'   `NULL` the window is the bounding box of the cells.
+#' @param mask_scale Number of coordinate units per mask pixel, e.g. `32`
+#'   for coordinates at 40x and a thumbnail at 1.25x. For an `owin`, it is
+#'   used to rescale it (`NULL` means no rescaling).
+#' @param magnif,thumb_mag Shortcut for `mask_scale = magnif / thumb_mag`:
+#'   magnification of the coordinates (e.g. 20 or 40) and of the mask
+#'   thumbnail. Use either these or `mask_scale`.
+#' @param threshold Pixels with intensity above `threshold` (0-1 scale,
+#'   averaged over colour channels) are tissue.
+#' @param invert If `TRUE`, tissue is the pixels *below* `threshold`.
+#' @param x_col,y_col,marks_col Column names in `cells`. Set `marks_col` to
+#'   `NULL` for an unmarked pattern.
+#'
+#' @return A `ppp` object. Cells outside the window or with missing
+#'   coordinates are removed (with a message); their number is stored in
+#'   the attribute `"n_removed"`.
+#' @export
+#' @examples
+cells2ppp <- function(cells, mask = NULL, mask_scale = NULL,
+                      magnif = NULL, thumb_mag = 1.25,
+                      threshold = 0.5, invert = FALSE,
+                      x_col = "x", y_col = "y", marks_col = "mark") {
+  if (!is.data.frame(cells)) {
+    stop("`cells` must be a data.frame.", call. = FALSE)
+  }
+  needed <- c(x_col, y_col, marks_col)
+  missing_cols <- setdiff(needed, names(cells))
+  if (length(missing_cols) > 0) {
+    stop("Column(s) not found in `cells`: ",
+         paste(missing_cols, collapse = ", "), call. = FALSE)
+  }
+
+  x <- as.numeric(cells[[x_col]]); y <- as.numeric(cells[[y_col]])
+  marks <- if (is.null(marks_col)) NULL else as.factor(cells[[marks_col]])
+
+  # 1. drop cells with missing coordinates
+  ok <- is.finite(x) & is.finite(y); n_na <- sum(!ok)
+  if (n_na > 0) {
+    message(n_na, " cell(s) with missing coordinates removed.")
+    x <- x[ok]; y <- y[ok]
+    if (!is.null(marks)) marks <- marks[ok]
+  }
+  if (length(x) == 0) stop("No cells with valid coordinates.", call. = FALSE)
+
+  # 2. window
+  scale <- .resolve_mask_scale(mask, mask_scale, magnif, thumb_mag)
+  if (is.null(mask)) {
+    win <- spatstat.geom::owin(range(x), range(y))
+  } else if (spatstat.geom::is.owin(mask)) {
+    win <- if (is.null(scale)) mask else
+      spatstat.geom::affine(mask, mat = diag(c(scale, scale)))
+  } else if (is.character(mask) && length(mask) == 1) {
+    win <- .png2owin(mask, scale, threshold, invert)
+  } else {
+    stop("`mask` must be NULL, the path of a PNG file or an owin.",
+         call. = FALSE)
+  }
+
+  # 3. drop cells outside the window
+  inside <- spatstat.geom::inside.owin(x, y, win); n_out <- sum(!inside)
+  if (n_out > 0) {
+    message(n_out, " of ", length(x), " cell(s) (",
+            format(100 * n_out / length(x), digits = 2),
+            "%) outside the window removed.")
+    x <- x[inside]; y <- y[inside]
+    if (!is.null(marks)) marks <- marks[inside]
+  }
+
+  pp <- spatstat.geom::ppp(x, y, window = win, marks = marks, check = FALSE)
+  attr(pp, "n_removed") <- c(missing_coords = n_na, outside_window = n_out)
+  pp
+}
+```
+
+```{r}
+#| label: examples-cells2ppp
+
+set.seed(1)
+cells <- data.frame(
+  x = runif(500, 0, 320), y = runif(500, 0, 320),
+  mark = factor(sample(c("tumor", "stroma"), 500, replace = TRUE))
+)
+
+# bounding-box window
+pp <- cells2ppp(cells)
+
+# tissue mask: 10 x 10 pixel PNG, each pixel = 32 units
+m <- matrix(0, 10, 10); m[2:9, 2:9] <- 1
+f <- tempfile(fileext = ".png"); png::writePNG(m, f)
+pp <- cells2ppp(cells, mask = f, magnif = 40, thumb_mag = 1.25)
+attr(pp, "n_removed")
+```
+
+```{r}
+#| label: tests-cells2ppp
+
+library(spatstat.geom)
+
+sim_cells <- function(n = 400, size = 320) {
+  data.frame(
+    x = runif(n, 0, size), y = runif(n, 0, size),
+    mark = factor(sample(c("tumor", "stroma"), n, replace = TRUE))
+  )
+}
+
+write_mask <- function(m, ...) {
+  f <- tempfile(fileext = ".png")
+  png::writePNG(m, f, ...)
+  f
+}
+
+test_that("cells2ppp: bounding box, marks and column checks", {
+  set.seed(1)
+  cells <- sim_cells()
+  pp <- cells2ppp(cells)
+  expect_s3_class(pp, "ppp")
+  expect_equal(npoints(pp), nrow(cells))
+  expect_equal(levels(marks(pp)), levels(cells$mark))
+  expect_equal(unname(attr(pp, "n_removed")), c(0, 0))
+
+  expect_null(marks(cells2ppp(cells, marks_col = NULL)))
+  expect_error(cells2ppp(cells, marks_col = "type"), "type")
+  expect_error(cells2ppp(as.matrix(cells[, 1:2])), "data.frame")
+
+  names(cells)[1:2] <- c("cx", "cy")
+  expect_equal(npoints(cells2ppp(cells, x_col = "cx", y_col = "cy")), 400)
+})
+
+test_that("cells2ppp: missing coordinates are removed", {
+  set.seed(2)
+  cells <- sim_cells(50)
+  cells$x[1:3] <- NA
+  expect_message(pp <- cells2ppp(cells), "3 cell")
+  expect_equal(npoints(pp), 47)
+  expect_equal(attr(pp, "n_removed")[["missing_coords"]], 3)
+})
+
+test_that("cells2ppp: PNG mask is scaled and oriented correctly", {
+  # 10 x 10 thumbnail, tissue only in the TOP-LEFT quarter (rows 1-5 = top)
+  m <- matrix(0, 10, 10); m[1:5, 1:5] <- 1
+  f <- write_mask(m)
+  cells <- data.frame(x = c(10, 300, 10), y = c(10, 10, 300),
+                      mark = factor(c("a", "b", "a")))
+  # magnif 40 / thumb 1.25 = 32 units per pixel -> window 320 x 320
+  expect_message(pp <- cells2ppp(cells, mask = f, magnif = 40), "2 of 3")
+  expect_equal(Frame(pp)$xrange, c(0, 320))
+  expect_equal(area(Window(pp)), 160^2)
+  # only the cell near the origin (top-left in image coordinates) is kept
+  expect_equal(c(pp$x, pp$y), c(10, 10))
+  expect_equal(attr(pp, "n_removed")[["outside_window"]], 2)
+
+  # same result with mask_scale
+  pp2 <- suppressMessages(cells2ppp(cells, mask = f, mask_scale = 32))
+  expect_equal(area(Window(pp2)), area(Window(pp)))
+})
+
+test_that("cells2ppp: RGB/alpha masks, threshold and invert", {
+  m <- matrix(0, 8, 8); m[, 1:4] <- 1
+  rgba <- array(1, c(8, 8, 4)); rgba[, , 1:3] <- m
+  f <- write_mask(rgba)
+  cells <- data.frame(x = c(1, 7), y = c(4, 4), mark = factor(c("a", "b")))
+  pp <- suppressMessages(cells2ppp(cells, mask = f, mask_scale = 1))
+  expect_equal(area(Window(pp)), 32)
+  ppi <- suppressMessages(cells2ppp(cells, mask = f, mask_scale = 1,
+                                    invert = TRUE))
+  expect_equal(ppi$x, 7)
+  expect_error(cells2ppp(cells, mask = write_mask(matrix(0, 4, 4)),
+                         mask_scale = 1), "empty")
+})
+
+test_that("cells2ppp: owin mask and argument checks", {
+  set.seed(3)
+  cells <- sim_cells(200, size = 1)
+  W <- disc(0.5, c(0.5, 0.5))
+  pp <- suppressMessages(cells2ppp(cells, mask = W))
+  expect_true(all(inside.owin(pp$x, pp$y, W)))
+  # owin in thumbnail units rescaled
+  pp10 <- suppressMessages(cells2ppp(cells, mask = owin(c(0, 0.1), c(0, 0.1)),
+                                     mask_scale = 10))
+  expect_equal(npoints(pp10), nrow(cells))
+
+  f <- write_mask(matrix(1, 4, 4))
+  expect_error(cells2ppp(cells, mask = f), "mask_scale")
+  expect_error(cells2ppp(cells, mask = f, mask_scale = 2, magnif = 40),
+               "not both")
+  expect_error(cells2ppp(cells, mask = f, magnif = "40x"), "single positive")
+  expect_error(cells2ppp(cells, mask = "nope.png", mask_scale = 1), "not found")
+  expect_error(cells2ppp(cells, mask = 1), "PNG")
+})
+```
+
+## ann2ppp
+
+Scorciatoia che chiama `read_cells_h5ad()` e poi `cells2ppp()`.
+
+```{r}
+#| label: function-ann2ppp
+
+#' Read an h5ad file as a point pattern
+#'
+#' Convenience wrapper: [read_cells_h5ad()] followed by [cells2ppp()].
+#'
+#' @inheritParams read_cells_h5ad
+#' @inheritParams cells2ppp
+#' @param ... Further arguments passed to [cells2ppp()] (`threshold`,
+#'   `invert`).
+#'
+#' @return A `ppp` object, see [cells2ppp()].
+#' @export
+#' @examples
+ann2ppp <- function(data_path, mask = NULL, mask_scale = NULL,
+                    magnif = NULL, thumb_mag = 1.25, marks_col = "type",
+                    spatial_key = "spatial", coords_cols = NULL, ...) {
+  cells <- read_cells_h5ad(data_path, marks_col = marks_col,
+                           spatial_key = spatial_key,
+                           coords_cols = coords_cols)
+  cells2ppp(cells, mask = mask, mask_scale = mask_scale, magnif = magnif,
+            thumb_mag = thumb_mag,
+            marks_col = if (is.null(marks_col)) NULL else "mark", ...)
+}
+```
+
+```{r}
+#| label: examples-ann2ppp
+
+f    <- system.file("extdata", "tcga_tiny.h5ad", package = "SpaFun")
+mask <- system.file("extdata", "tcga_tiny_mask.png", package = "SpaFun")
+if (nzchar(f) && requireNamespace("anndataR", quietly = TRUE)) {
+  # the mask covers the whole slide, the tiny file only a small square of it
+  pp <- ann2ppp(f, mask = mask, magnif = 40, thumb_mag = 1.25,
+                marks_col = "type")
+  pp
+}
+```
+
+## Funzioni interne
+
+```{r}
+#| label: function-read_data_helpers
+
+#' Internal helpers for reading data
+#' @noRd
+.resolve_mask_scale <- function(mask, mask_scale, magnif, thumb_mag) {
+  if (!is.null(mask_scale) && !is.null(magnif)) {
+    stop("Give either `mask_scale` or `magnif`, not both.", call. = FALSE)
+  }
+  if (!is.null(magnif)) {
+    if (!is.numeric(magnif) || length(magnif) != 1 || magnif <= 0 ||
+        !is.numeric(thumb_mag) || length(thumb_mag) != 1 || thumb_mag <= 0) {
+      stop("`magnif` and `thumb_mag` must be single positive numbers ",
+           "(e.g. 40, not \"40x\").", call. = FALSE)
+    }
+    mask_scale <- magnif / thumb_mag
+  }
+  if (!is.null(mask_scale) &&
+      (!is.numeric(mask_scale) || length(mask_scale) != 1 || mask_scale <= 0)) {
+    stop("`mask_scale` must be a single positive number.", call. = FALSE)
+  }
+  if (is.character(mask) && is.null(mask_scale)) {
+    stop("With a PNG mask, give `mask_scale` or `magnif` (and `thumb_mag`).",
+         call. = FALSE)
+  }
+  mask_scale
+}
+
+.png2owin <- function(path, scale, threshold = 0.5, invert = FALSE) {
+  if (!file.exists(path)) {
+    stop("Mask file not found: ", path, call. = FALSE)
+  }
+  img <- png::readPNG(path)
+  # grey levels: average of the colour channels, alpha channel ignored
+  if (length(dim(img)) == 3) {
+    nch <- dim(img)[3]
+    col_ch <- if (nch %in% c(2, 4)) seq_len(nch - 1) else seq_len(nch)
+    img <- apply(img[, , col_ch, drop = FALSE], c(1, 2), mean)
+  }
+  m <- if (invert) img < threshold else img > threshold
+  if (!any(m)) {
+    stop("The mask is empty: no pixel above `threshold`. ",
+         "Check `threshold` or `invert`.", call. = FALSE)
+  }
+  # readPNG: rows = y (top row first), columns = x. owin masks use the same
+  # layout (row i = i-th y value), so no transpose is needed.
+  spatstat.geom::owin(xrange = c(0, ncol(m) * scale),
+                      yrange = c(0, nrow(m) * scale),
+                      mask = m)
+}
+
+.is_gzip <- function(path) {
+  con <- file(path, "rb")
+  on.exit(close(con))
+  magic <- readBin(con, "raw", n = 2)
+  length(magic) == 2 && magic[1] == as.raw(0x1f) && magic[2] == as.raw(0x8b)
+}
+
+.gunzip_tmp <- function(path) {
+  tmp <- tempfile(fileext = ".h5ad")
+  con_in <- gzfile(path, "rb")
+  on.exit(close(con_in))
+  con_out <- file(tmp, "wb")
+  on.exit(close(con_out), add = TRUE)
+  repeat {
+    buf <- readBin(con_in, "raw", n = 1e7)
+    if (length(buf) == 0) break
+    writeBin(buf, con_out)
+  }
+  tmp
+}
+```
+
+# Example data
+
+`tcga_crops` holds a square crop of 5 TCGA slides, with all the cells and the 6 cell types. `inst/extdata` holds a very small h5ad file (`tcga_tiny.h5ad`) and the mask of its slide (`tcga_tiny_mask.png`), used in the reading examples. Everything is built by `data-raw/tcga_examples.R`.
+
+```{r}
+#| label: function-tcga_crops
+
+#' Example crops of five TCGA slides
+#'
+#' One square region per slide, with all the cells detected inside it.
+#' Each region was chosen inside the tissue mask, where neoplastic and
+#' stromal cells are most balanced, and holds about 12,000-30,000 cells.
+#'
+#' @format A named list of 5 marked point patterns (`ppp`), named by TCGA
+#'   patient barcode. Coordinates are in pixels of the 40x slide; the marks
+#'   are a factor with the cell types `benign epithelial`, `inflammatory`,
+#'   `necrotic`, `neoplastic`, `no label` and `stromal`. The window of each
+#'   pattern is the square intersected with the tissue mask.
+#' @source H&E diagnostic slides from The Cancer Genome Atlas
+#'   (<https://portal.gdc.cancer.gov>), cells segmented and classified with
+#'   HoVer-Net. Built by `data-raw/tcga_examples.R`.
+"tcga_crops"
+```
+
+```{r}
+#| label: examples-tcga_crops
+
+data(tcga_crops)
+sapply(tcga_crops, spatstat.geom::npoints)
+plot(tcga_crops[[1]], cols = 1:6, pch = 20, cex = 0.2,
+     main = names(tcga_crops)[1])
+```
+
+```{r}
+#| label: development-inflate
+#| eval: FALSE
+
+# Run but keep eval=FALSE to avoid infinite loop
+fusen::inflate(flat_file = "dev/flat_read_data.qmd", vignette_name = "Reading data")
+```

@@ -30,3 +30,7 @@ inst/doc
 .vscode/
 .claude/
 docs
+
+# dati grezzi pesanti (TCGA h5ad, ~285 MB): restano solo in locale
+data-raw/TCGA/
+_to_delete/

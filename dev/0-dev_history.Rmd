@@ -17,8 +17,8 @@ fusen::fill_description(
   pkg = here::here(),
   fields = list(
     Title = "Spatial Point Pattern Analysis with FDA",
-    Version = "0.1",
-    Description = "Function to analyse TCGA dataset",
+    Version = "0.0.0.9000",
+    Description = "Function to analyse TCGA dataset.",
     `Authors@R` = c(
       person("Valerio", "Reffo", email = "valerio.reffo@phd.unipd.it", role = c("aut", "cre"), comment = c(ORCID = "0009-0006-8690-7018"))
     )
@@ -54,93 +54,74 @@ usethis::use_news_md()
 ```
 
 claude suggerisce
-```{r}
+```{r, eval=FALSE}
 devtools::build_readme()
 ```
 
 
 **From now, you will need to "inflate" your package at least once to be able to use the following commands. Let's go to your flat template, and come back here later if/when needed.**
 
-# Inflate flat_Lcross_pipeline.Rmd
+# Inflate flat_read_data.Rmd
 
-Start by inflating `dev/flat_Lcross_pipeline.qmd`:
+Start by inflating `dev/flat_read_data.qmd`:
 
-```{r development-inflate, eval=FALSE}
+```{r inflate-read_data, eval=FALSE}
 # Run but keep eval=FALSE to avoid infinite loop
 # Execute in the console directly
-fusen::inflate(flat_file = "dev/flat_Lcross_pipeline.qmd",
-               vignette_name = "dev-Lcross_pipeline",
+fusen::inflate(flat_file = "dev/flat_read_data.qmd",
+               vignette_name = "Reading data",
                overwrite = T)
 ```
 
-finche non risolvo il problema dei dati per le vignette su mac-mini
-```{r}
-fusen::inflate(flat_file = "dev/flat_Lcross_pipeline.qmd",
-               vignette_name = "dev-Lcross_pipeline",
-               overwrite = TRUE, check = FALSE)
+# Create the data for the examples
+
+Needs `read_cells_h5ad()` and `cells2ppp()`, so run it after inflating
+`flat_read_data.qmd`. It reads the 5 raw TCGA slides in `data-raw/TCGA/`
+(not versioned) and writes:
+
+- `data/tcga_crops.rda` (documented in `flat_read_data.qmd`)
+- `inst/extdata/tcga_tiny.h5ad` and `inst/extdata/tcga_tiny_mask.png`
+
+Rerun it only if the raw data or the script change.
+
+```{r example-data, eval=FALSE}
+source("data-raw/tcga_examples.R")
 ```
 
+# Inflate flat_downsampling.qmd
+
+Downsampling functions (`downsample()`, `downsample_uniform()`,
+`downsample_KDE()`, `downsample_window()`). The vignette uses `tcga_crops`,
+so the example data must exist.
+
+```{r inflate-downsampling, eval=FALSE}
+fusen::inflate(flat_file = "dev/flat_downsampling.qmd",
+               vignette_name = "Downsampling",
+               overwrite = TRUE)
+```
+
+# Inflate flat_Lcross_pipeline.qmd
+
+No functions: only the vignette with the pipeline from h5ad files to L-cross
+functions. Runs on the example data; the HPC chunks have `eval: false`.
+
+```{r inflate-Lcross_pipeline, eval=FALSE}
+fusen::inflate(flat_file = "dev/flat_Lcross_pipeline.qmd",
+               vignette_name = "Lcross pipeline",
+               overwrite = TRUE)
+```
 
 This will put everything in the right place to get started. We then continue by
-adding the fda pipeline.
+adding the FDA pipeline (it uses `downsample()`, so inflate it after the
+downsampling flat file).
 
-```{r development-inflate, eval=FALSE}
+```{r inflate-fda_pipeline, eval=FALSE}
 # Run but keep eval=FALSE to avoid infinite loop
 # Execute in the console directly
 fusen::inflate(flat_file = "dev/flat_fda_pipeline.qmd",
-               vignette_name = "dev-fda_pipeline",
-               overwrite = T, check = F)
+               vignette_name = "FDA pipeline",
+               overwrite = TRUE)
 ```
-
-# Including datasets
-
-The datasets created in the `save_data.Rmd` have still to be saved into the
-`data/` folder of the package. This will make the datasets available using
-`data("commune_level_data")`. But the package has to be inflated once at least
-before being able to save the data and document it. We are going to knit the
-vignette generated from `save_data.Rmd` for this. This vignette contains all the
-calls needed to save the data. Then, we are going to use `usethis::use_data()`
-to save the datasets. We knit the vignette into a temporary file using `tempfile()`
-because we’re not interested in the output itself, but simply want the datasets
-to be generated. When using `knitr::knit()`, every object that is created in the 
-knitted vignette would be made available in the global environment. In this case,
-knitting the vinette would make `commune_level_data`, `country_level_data` and
-`communes` available in the global environment, which in turn would make it possible
-to save using `usethis::use_data(commune_level_data)`. But we don’t want to clutter
-the global environment with these datasets, we only want to save them.
-
-So to avoid cluttering the global environment, we run the calls inside `local()`.
-`local()` runs code in a temporary environment which is then discarded. This makes
-it possible to turn this operation pure:
-
-```{r}
-local({
-  knitr::knit("vignettes/dev-save_data.Rmd", output = tempfile())
-  usethis::use_data(commune_level_data, overwrite = TRUE)
-  usethis::use_data(country_level_data, overwrite = TRUE)
-  usethis::use_data(communes, overwrite = TRUE)
-})
-
-```
-
-The first call, to `knitr::knit()` knits the vignette, and makes the datasets
-available to the local environment. Inside this local environment it is now possible
-to call `usethis::use_data()` to save each data set in turn. The datasets are
-now save inside the `data/` folder of the package, and are thus available to users
-of the package using `data("dataset_name")`.
-
-We still need to document the datasets. For this, we are going to inflate
-another `.Rmd` file. Take a look at `dev/data_doc.Rmd`. This vignette documents the
-data sets when we inflate it. Since this vignette is only useful for documenting the 
-datasets, we don’t want to include it as a vignette in the package, so we set its name
-to `NA`.
-
-```{r}
-fusen::inflate(flat_file = "dev/data_doc.Rmd",
-               vignette_name = NA,
-               overwrite = T)
-```
-
 
 # Package development tools
 ## Use once
@@ -162,9 +143,12 @@ usethis::use_github()
 
 # Set Continuous Integration
 # _GitHub
-usethis::use_github_action_check_standard()
-usethis::use_github_action("pkgdown")
+# (use_github_action_check_standard() is defunct in usethis >= 2.2)
+usethis::use_github_action("check-standard")
 usethis::use_github_action("test-coverage")
+# pkgdown site on GitHub Pages: creates the gh-pages branch, turns on Pages,
+# adds the pkgdown workflow and the URL in DESCRIPTION and _pkgdown.yml
+usethis::use_pkgdown_github_pages()
 # _GitLab
 gitlabr::use_gitlab_ci(type = "check-coverage-pkgdown")
 
@@ -178,7 +162,7 @@ usethis::use_build_ignore("renv.lock")
 
 ## Use everytime needed
 
-```{r}
+```{r, eval=FALSE}
 # Simulate package installation
 pkgload::load_all()
 
@@ -192,7 +176,7 @@ devtools::check()
 
 # Share the package
 
-```{r}
+```{r, eval=FALSE}
 # set and try pkgdown documentation website
 usethis::use_pkgdown()
 pkgdown::build_site()

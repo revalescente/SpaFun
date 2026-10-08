@@ -5,6 +5,9 @@
 
 <!-- badges: start -->
 
+[![R-CMD-check](https://github.com/revalescente/SpaFun/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/revalescente/SpaFun/actions/workflows/R-CMD-check.yaml)
+[![Codecov test
+coverage](https://codecov.io/gh/revalescente/SpaFun/graph/badge.svg)](https://app.codecov.io/gh/revalescente/SpaFun)
 <!-- badges: end -->
 
 The goal of SpaFun is to …

@@ -5,27 +5,35 @@ Authors@R:
     person("Valerio", "Reffo", , "valerio.reffo@phd.unipd.it", role = c("aut", "cre"),
            comment = c(ORCID = "0009-0006-8690-7018"))
 Description: Function to analyse TCGA dataset.
+URL: https://github.com/revalescente/SpaFun, https://revalescente.github.io/SpaFun/
+BugReports: https://github.com/revalescente/SpaFun/issues
 License: GPL (>= 3)
+biocViews:
+Depends: 
+    R (>= 3.5)
 Imports: 
-    anndataR,
     dplyr,
     fda,
+    future.apply,
     ggplot2,
-    parallel,
+    png,
     spatstat.explore,
     spatstat.geom,
+    spatstat.random,
+    stats,
     tidyr,
     utils
 Suggests: 
+    anndataR,
     data.table,
-    imager,
     knitr,
     rhdf5,
     rmarkdown,
-    spatstat
+    testthat
 VignetteBuilder: 
     knitr
 Config/fusen/version: 0.7.2
 Config/roxygen2/version: 8.1.0
 Encoding: UTF-8
+LazyData: true
 Roxygen: list(markdown = TRUE)

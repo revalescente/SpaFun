@@ -2,30 +2,59 @@
 % Please edit documentation in R/ann2ppp.R
 \name{ann2ppp}
 \alias{ann2ppp}
-\title{ann2ppp Read a h5ad file and convert it to a point process object from spatstat library}
+\title{Read an h5ad file as a point pattern}
 \usage{
 ann2ppp(
   data_path,
   mask = NULL,
-  magnif,
-  spat_coords_name = c("x", "y"),
-  marks_col = "type"
+  mask_scale = NULL,
+  magnif = NULL,
+  thumb_mag = 1.25,
+  marks_col = "type",
+  spatial_key = "spatial",
+  coords_cols = NULL,
+  ...
 )
 }
 \arguments{
-\item{data_path}{path to the h5ad file}
+\item{data_path}{Path to the \code{.h5ad} or \code{.h5ad.gz} file.}
 
-\item{mask}{Optional: img object to be converted in the window of the point process class object}
+\item{mask}{Optional tissue mask: path to a PNG file or an \code{owin}. If
+\code{NULL} the window is the bounding box of the cells.}
 
-\item{magnif}{level of magnification of the original H&E image, can be 20x or 40x}
+\item{mask_scale}{Number of coordinate units per mask pixel, e.g. \code{32}
+for coordinates at 40x and a thumbnail at 1.25x. For an \code{owin}, it is
+used to rescale it (\code{NULL} means no rescaling).}
 
-\item{spat_coords_name}{names of coordinate of the centroids in the h5ad file}
+\item{magnif, thumb_mag}{Shortcut for \code{mask_scale = magnif / thumb_mag}:
+magnification of the coordinates (e.g. 20 or 40) and of the mask
+thumbnail. Use either these or \code{mask_scale}.}
 
-\item{marks_col}{name of the .obs vector with the names of the marks (usually the cell types names)}
+\item{marks_col}{Name of the \code{obs} column with the cell labels, or \code{NULL}
+to read coordinates only.}
+
+\item{spatial_key}{Name of the \code{obsm} matrix with the coordinates (first
+column x, second column y). Ignored if \code{coords_cols} is given.}
+
+\item{coords_cols}{Optional: names of two \code{obs} columns holding x and y,
+to use instead of \code{obsm[[spatial_key]]}.}
+
+\item{...}{Further arguments passed to \code{\link[=cells2ppp]{cells2ppp()}} (\code{threshold},
+\code{invert}).}
 }
 \value{
-An object of class "ppp"
+A \code{ppp} object, see \code{\link[=cells2ppp]{cells2ppp()}}.
 }
 \description{
-ann2ppp Read a h5ad file and convert it to a point process object from spatstat library
+Convenience wrapper: \code{\link[=read_cells_h5ad]{read_cells_h5ad()}} followed by \code{\link[=cells2ppp]{cells2ppp()}}.
+}
+\examples{
+f    <- system.file("extdata", "tcga_tiny.h5ad", package = "SpaFun")
+mask <- system.file("extdata", "tcga_tiny_mask.png", package = "SpaFun")
+if (nzchar(f) && requireNamespace("anndataR", quietly = TRUE)) {
+  # the mask covers the whole slide, the tiny file only a small square of it
+  pp <- ann2ppp(f, mask = mask, magnif = 40, thumb_mag = 1.25,
+                marks_col = "type")
+  pp
+}
 }

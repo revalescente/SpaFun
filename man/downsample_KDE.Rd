@@ -2,23 +2,55 @@
 % Please edit documentation in R/downsample_kde.R
 \name{downsample_KDE}
 \alias{downsample_KDE}
-\title{downsample_KDE Function to downsample based on the Kernel Density Estimation.}
+\title{Inverse-density (KDE) downsampling}
 \usage{
-downsample_KDE(ppp_obj, marks_name, n_target, ...)
+downsample_KDE(
+  pp,
+  n_target = NULL,
+  prop = NULL,
+  sigma = spatstat.explore::bw.scott,
+  dimyx = 256,
+  ...
+)
 }
 \arguments{
-\item{ppp_obj}{object of class "ppp" from spatstat}
+\item{pp}{A \code{ppp} object, or a list of \code{ppp} objects.}
 
-\item{marks_name}{vector of dim 2 with the names of the cell types to apply the function to}
+\item{n_target}{Number of points to keep. Mutually exclusive with \code{prop}.
+With a list, either one value or one value per pattern.}
 
-\item{n_target}{number of point in the ppp object to downsample}
+\item{prop}{Fraction of points to keep, in (0, 1]. Mutually exclusive with
+\code{n_target}.}
 
-\item{...}{additional specification for the density.ppp function}
+\item{sigma}{Kernel bandwidth. Either a number or a function that takes a
+\code{ppp} and returns a bandwidth. Default \code{\link[spatstat.explore:bw.scott]{spatstat.explore::bw.scott()}},
+which is fast on large patterns.}
+
+\item{dimyx}{Resolution of the pixel grid used for the density estimate
+(passed to \code{\link[spatstat.explore:density.ppp]{spatstat.explore::density.ppp()}}). The density is computed
+on the grid and looked up at the points, which keeps the cost almost
+independent of the number of points.}
+
+\item{...}{Further arguments passed to \code{\link[spatstat.explore:density.ppp]{spatstat.explore::density.ppp()}}.}
 }
 \value{
-An object of class "ppp" with n_target points for each marks_name
+A \code{ppp} with attribute \code{"downsample"}.
 }
 \description{
-It needs a pp objects, the marks name which is a vector of dim 2 and a target number of point to which downsample.
-It's possible to personalized the density.ppp function
+Samples points with probability proportional to \code{1 / density}, where the
+density is a Gaussian kernel estimate. Points in sparse areas are kept
+more often, so the result is closer to a homogeneous pattern.
+}
+\details{
+\strong{Warning:} this changes the second-order structure (K, L, pair
+correlation) of the pattern and reduces the clustering you would measure.
+Use it for visualisation or for methods that need even coverage, not
+before estimating \code{Lcross}; use \code{\link[=downsample_uniform]{downsample_uniform()}} instead.
+}
+\examples{
+library(spatstat.random)
+set.seed(1)
+X <- rMatClust(20, 0.05, 100)
+Y <- downsample_KDE(X, prop = 0.2)
+spatstat.geom::npoints(Y)
 }

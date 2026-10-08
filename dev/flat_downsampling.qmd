@@ -1,0 +1,607 @@
+---
+title: "Downsampling"
+author: "Valerio Reffo"
+format: html
+---
+
+```{r}
+#| label: development
+#| include: FALSE
+
+library(testthat)
+```
+
+```{r}
+#| label: development-load
+
+pkgload::load_all(export_all = FALSE)
+```
+
+# Downsampling
+
+Whole-slide patterns have up to millions of cells, too many for `Lcross`. These functions reduce the number of points. All of them take either `n_target` (number of points) or `prop` (fraction), and return a `ppp` with the attribute `"downsample"` describing what was done.
+
+```{r}
+#| label: setup
+#| message: false
+
+library(SpaFun)
+library(spatstat.geom)
+data(tcga_crops)
+pp <- tcga_crops[[1]]
+pp
+```
+
+## downsample
+
+Wrapper: chooses the method with `method` and accepts a single `ppp` or a list of samples. Lists are processed in parallel with `future.apply` (choose the backend with `future::plan()`); results are reproducible after `set.seed()`.
+
+With `marks` only the listed cell types are kept; with `by_marks = TRUE` each type is downsampled separately, so `n_target` is the number of cells *per type*.
+
+```{r}
+#| label: function-downsample
+
+#' Downsample a spatial point pattern
+#'
+#' Wrapper that reduces the number of points of one or more point patterns
+#' with the chosen method. When `pp` is a list of patterns, samples are
+#' processed in parallel with `future.apply` (set the backend with
+#' `future::plan()`); results are reproducible after `set.seed()`.
+#'
+#' Methods:
+#' - `"uniform"`: random thinning, see [downsample_uniform()]. Leaves K and L
+#'   functions unchanged: the recommended choice before computing `Lcross`.
+#' - `"kde"`: inverse-density sampling, see [downsample_KDE()]. Makes the
+#'   pattern more homogeneous: do not use it to estimate K or L.
+#' - `"window"`: keeps all points inside random tiles, see
+#'   [downsample_window()]. Local structure is intact, observed area shrinks.
+#'
+#' @param pp A `ppp` object, or a list of `ppp` objects.
+#' @param method One of `"uniform"`, `"kde"`, `"window"`.
+#' @param n_target Number of points to keep. Mutually exclusive with `prop`.
+#'   With a list, either one value or one value per pattern.
+#' @param prop Fraction of points to keep, in (0, 1]. Mutually exclusive with
+#'   `n_target`.
+#' @param marks Optional character vector of cell types (mark levels) to
+#'   keep; the other points are dropped before downsampling.
+#' @param by_marks If `TRUE`, each cell type is downsampled separately and
+#'   `n_target` / `prop` apply to each type (e.g. `n_target = 40000` keeps
+#'   up to 40000 cells *of each type*). Types with fewer points are kept
+#'   whole. With `method = "uniform"` this is still independent thinning, so
+#'   cross-type K and L functions are unchanged. Not available for
+#'   `method = "window"`.
+#' @param ... Further arguments passed to the method function.
+#'
+#' @return A `ppp` (or a list of `ppp`, with the input names) with attribute
+#'   `"downsample"` describing the operation.
+#' @export
+#' @examples
+downsample <- function(pp, method = c("uniform", "kde", "window"),
+                       n_target = NULL, prop = NULL,
+                       marks = NULL, by_marks = FALSE, ...) {
+  method <- match.arg(method)
+  fun <- switch(method,
+                uniform = downsample_uniform,
+                kde     = downsample_KDE,
+                window  = downsample_window)
+  if (by_marks && method == "window") {
+    stop("`by_marks = TRUE` is not available for method \"window\": ",
+         "each cell type would get a different window.", call. = FALSE)
+  }
+  one <- function(x, n_target, prop) {
+    .downsample_marks(x, fun, method, n_target, prop, marks, by_marks, ...)
+  }
+
+  if (spatstat.geom::is.ppp(pp)) {
+    return(one(pp, n_target, prop))
+  }
+
+  if (!is.list(pp) || !all(vapply(pp, spatstat.geom::is.ppp, logical(1)))) {
+    stop("`pp` must be a ppp object or a list of ppp objects.", call. = FALSE)
+  }
+  n <- length(pp)
+  n_target <- .recycle_arg(n_target, n, "n_target")
+  prop     <- .recycle_arg(prop, n, "prop")
+
+  out <- future.apply::future_lapply(
+    seq_len(n),
+    function(k) one(pp[[k]], n_target[[k]], prop[[k]]),
+    future.seed = TRUE
+  )
+  names(out) <- names(pp)
+  out
+}
+```
+
+```{r}
+#| label: examples-downsample
+
+library(spatstat.random)
+set.seed(1)
+X <- rpoispp(2000)
+Y <- downsample(X, method = "uniform", prop = 0.1)
+attr(Y, "downsample")
+
+# several samples, in parallel
+# future::plan(future::multisession, workers = 4)
+Xs <- list(a = rpoispp(2000), b = rpoispp(3000))
+Ys <- downsample(Xs, method = "window", n_target = 500)
+sapply(Ys, spatstat.geom::npoints)
+```
+
+```{r}
+#| label: tests-downsample
+
+library(spatstat.random)
+library(spatstat.geom)
+
+make_marked <- function(n = 3000) {
+  X <- rpoispp(n)
+  marks(X) <- factor(sample(c("T", "B", "Tum"), npoints(X), replace = TRUE))
+  X
+}
+
+test_that("wrapper dispatches and handles lists reproducibly", {
+  Xs <- list(a = rpoispp(1000), b = rpoispp(2000))
+  set.seed(7); Y1 <- downsample(Xs, method = "uniform", n_target = c(100, 200))
+  set.seed(7); Y2 <- downsample(Xs, method = "uniform", n_target = c(100, 200))
+  expect_named(Y1, c("a", "b"))
+  expect_equal(unname(sapply(Y1, npoints)), c(100, 200))
+  expect_identical(Y1$a$x, Y2$a$x)
+  expect_equal(attr(downsample(Xs$a, "kde", prop = 0.1), "downsample")$method, "kde")
+  expect_error(downsample(list(1, 2), n_target = 10), "list of ppp")
+  expect_error(downsample(Xs, n_target = c(1, 2, 3)), "length")
+})
+
+test_that("marks and by_marks select and downsample each type", {
+  set.seed(8)
+  X <- rpoispp(5000)
+  marks(X) <- factor(sample(c("neo", "stroma", "imm"), npoints(X),
+                            replace = TRUE, prob = c(.6, .3, .1)))
+  Y <- downsample(X, "uniform", n_target = 300, marks = c("neo", "stroma"),
+                  by_marks = TRUE)
+  expect_equal(as.vector(table(marks(Y))), c(300, 300))
+  expect_equal(levels(marks(Y)), c("neo", "stroma"))
+  expect_true(attr(Y, "downsample")$by_marks)
+  # all kept points are points of X
+  expect_true(all(paste(Y$x, Y$y) %in% paste(X$x, X$y)))
+
+  # types smaller than n_target are kept whole
+  Z <- downsample(X, "uniform", n_target = 1e6, by_marks = TRUE)
+  expect_equal(npoints(Z), npoints(X))
+
+  # prop per type, KDE per type
+  P <- downsample(X, "kde", prop = 0.1, by_marks = TRUE)
+  expect_equal(as.vector(table(marks(P))),
+               round(0.1 * as.vector(table(marks(X)))))
+
+  # marks only, without by_marks: total target
+  Q <- downsample(X, "uniform", n_target = 200, marks = "imm")
+  expect_equal(npoints(Q), 200)
+
+  expect_error(downsample(X, "window", prop = .5, by_marks = TRUE), "window")
+  expect_error(downsample(X, marks = "tumor", prop = .5), "not found")
+  expect_error(downsample(unmark(X), prop = .5, by_marks = TRUE), "factor")
+})
+```
+
+## downsample_uniform
+
+Uniform random thinning. Independent thinning leaves the K and L functions (cross-type ones included) unchanged: this is the method to use before `Lcross`.
+
+```{r}
+#| label: function-downsample_uniform
+
+#' Uniform random downsampling
+#'
+#' Keeps a random subset of points, each point with the same probability.
+#' Independent thinning leaves the K and L functions (including the
+#' cross-type ones) unchanged, so it is the method to use before `Lcross`.
+#'
+#' @inheritParams downsample
+#' @param exact If `TRUE` (default) keeps exactly `n_target` points (simple
+#'   random sampling without replacement). If `FALSE` uses independent
+#'   thinning ([spatstat.random::rthin()]): the number of kept points is
+#'   random, with expected value `n_target`.
+#'
+#' @return A `ppp` with attribute `"downsample"`.
+#' @export
+#' @examples
+downsample_uniform <- function(pp, n_target = NULL, prop = NULL, exact = TRUE) {
+  .check_ppp(pp)
+  n <- spatstat.geom::npoints(pp)
+  tgt <- .resolve_target(n, n_target, prop)
+  if (tgt >= n) return(.tag(pp, "uniform", n))
+
+  if (exact) {
+    out <- pp[sort(sample.int(n, tgt))]
+  } else {
+    out <- spatstat.random::rthin(pp, P = tgt / n)
+  }
+  .tag(out, "uniform", n)
+}
+```
+
+```{r}
+#| label: examples-downsample_uniform
+
+library(spatstat.random)
+set.seed(1)
+X <- rpoispp(2000)
+spatstat.geom::npoints(downsample_uniform(X, n_target = 300))
+```
+
+```{r}
+#| label: tests-downsample_uniform
+
+library(spatstat.random)
+library(spatstat.geom)
+
+make_marked <- function(n = 3000) {
+  X <- rpoispp(n)
+  marks(X) <- factor(sample(c("T", "B", "Tum"), npoints(X), replace = TRUE))
+  X
+}
+
+test_that("target resolution works", {
+  set.seed(1)
+  X <- rpoispp(1000)
+  expect_error(downsample_uniform(X), "exactly one")
+  expect_error(downsample_uniform(X, n_target = 10, prop = 0.1), "exactly one")
+  expect_error(downsample_uniform(X, prop = 1.5), "prop")
+  expect_equal(npoints(downsample_uniform(X, n_target = 1e6)), npoints(X))
+})
+
+test_that("uniform keeps exact n and marks", {
+  set.seed(2)
+  X <- make_marked()
+  Y <- downsample_uniform(X, n_target = 500)
+  expect_equal(npoints(Y), 500)
+  expect_true(is.factor(marks(Y)))
+  expect_equal(attr(Y, "downsample")$method, "uniform")
+  Z <- downsample_uniform(X, prop = 0.2, exact = FALSE)
+  expect_true(abs(npoints(Z) - 0.2 * npoints(X)) < 0.05 * npoints(X))
+})
+
+test_that("uniform thinning preserves L-cross (approximately)", {
+  set.seed(3)
+  X <- rMatClust(30, 0.04, 150)
+  marks(X) <- factor(sample(c("a", "b"), npoints(X), replace = TRUE))
+  r <- seq(0, 0.1, length.out = 21)
+  L0 <- spatstat.explore::Lcross(X, "a", "b", r = r, correction = "border")$border
+  L1 <- spatstat.explore::Lcross(downsample_uniform(X, prop = 0.3),
+                                 "a", "b", r = r, correction = "border")$border
+  expect_lt(max(abs(L1 - L0)[-1]), 0.02)
+})
+```
+
+## downsample_KDE
+
+Sampling with probability proportional to `1 / density`. It makes the pattern more homogeneous, so it **changes** K and L: use it for visualisation, not before estimating `Lcross`.
+
+The density is computed on a pixel grid and looked up at the points, and the weighted sampling uses the Efraimidis-Spirakis algorithm: half a million points take about a second.
+
+```{r}
+#| label: function-downsample_KDE
+
+#' Inverse-density (KDE) downsampling
+#'
+#' Samples points with probability proportional to `1 / density`, where the
+#' density is a Gaussian kernel estimate. Points in sparse areas are kept
+#' more often, so the result is closer to a homogeneous pattern.
+#'
+#' **Warning:** this changes the second-order structure (K, L, pair
+#' correlation) of the pattern and reduces the clustering you would measure.
+#' Use it for visualisation or for methods that need even coverage, not
+#' before estimating `Lcross`; use [downsample_uniform()] instead.
+#'
+#' @inheritParams downsample
+#' @param sigma Kernel bandwidth. Either a number or a function that takes a
+#'   `ppp` and returns a bandwidth. Default [spatstat.explore::bw.scott()],
+#'   which is fast on large patterns.
+#' @param dimyx Resolution of the pixel grid used for the density estimate
+#'   (passed to [spatstat.explore::density.ppp()]). The density is computed
+#'   on the grid and looked up at the points, which keeps the cost almost
+#'   independent of the number of points.
+#' @param ... Further arguments passed to [spatstat.explore::density.ppp()].
+#'
+#' @return A `ppp` with attribute `"downsample"`.
+#' @export
+#' @examples
+downsample_KDE <- function(pp, n_target = NULL, prop = NULL,
+                           sigma = spatstat.explore::bw.scott,
+                           dimyx = 256, ...) {
+  .check_ppp(pp)
+  n <- spatstat.geom::npoints(pp)
+  tgt <- .resolve_target(n, n_target, prop)
+  if (tgt >= n) return(.tag(pp, "kde", n))
+
+  if (is.function(sigma)) sigma <- sigma(pp)
+  # density on a pixel grid (FFT, fast), then looked up at the points:
+  # at = "points" is quadratic in n and too slow for large patterns
+  dens_im <- spatstat.explore::density.ppp(
+    spatstat.geom::unmark(pp), sigma = sigma, dimyx = dimyx, ...
+  )
+  dens <- spatstat.geom::safelookup(dens_im, pp, warn = FALSE)
+  dens[!is.finite(dens) | dens <= 0] <- min(dens[dens > 0 & is.finite(dens)])
+  w <- 1 / dens
+
+  # weighted sampling without replacement (Efraimidis-Spirakis): same law as
+  # sample.int(n, tgt, prob = w) but O(n log n) instead of O(n * tgt)
+  keys <- stats::rexp(n) / w
+  out <- pp[sort(order(keys)[seq_len(tgt)])]
+  .tag(out, "kde", n, sigma = sigma)
+}
+```
+
+```{r}
+#| label: examples-downsample_KDE
+
+library(spatstat.random)
+set.seed(1)
+X <- rMatClust(20, 0.05, 100)
+Y <- downsample_KDE(X, prop = 0.2)
+spatstat.geom::npoints(Y)
+```
+
+```{r}
+#| label: tests-downsample_KDE
+
+library(spatstat.random)
+library(spatstat.geom)
+
+make_marked <- function(n = 3000) {
+  X <- rpoispp(n)
+  marks(X) <- factor(sample(c("T", "B", "Tum"), npoints(X), replace = TRUE))
+  X
+}
+
+test_that("KDE downsampling returns n_target points", {
+  set.seed(4)
+  X <- rMatClust(20, 0.05, 100)
+  Y <- downsample_KDE(X, n_target = 300)
+  expect_equal(npoints(Y), 300)
+  expect_true(is.numeric(attr(Y, "downsample")$sigma))
+  expect_equal(npoints(downsample_KDE(X, n_target = 300, sigma = 0.05)), 300)
+})
+```
+
+## downsample_window
+
+Keeps all the points inside randomly chosen square tiles until `n_target` is reached. The window of the result is the union of the tiles, so edge corrections stay correct; the largest usable `r` gets smaller.
+
+```{r}
+#| label: function-downsample_window
+
+#' Downsampling by sub-windows
+#'
+#' Divides the window into a grid of square tiles and adds randomly chosen
+#' tiles until at least `n_target` points are covered. All points inside the
+#' chosen tiles are kept, and the window of the result is the union of those
+#' tiles intersected with the original window, so edge corrections in
+#' `Lcross` stay correct.
+#'
+#' Local structure is fully preserved, but the observed area shrinks: border
+#' effects grow and the largest usable distance `r` gets smaller (at most
+#' about `tile_size / 2` for an isolated tile).
+#'
+#' @inheritParams downsample
+#' @param tile_size Side of the square tiles, in the units of `pp`. Default:
+#'   the side giving about 100 tiles over the bounding box.
+#' @param weighted If `TRUE`, tiles are drawn with probability proportional
+#'   to the number of points they contain (fewer empty tiles). Default
+#'   `FALSE`, i.e. uniform over non-empty tiles.
+#'
+#' @return A `ppp` with attribute `"downsample"`; its element `tiles` is the
+#'   `tess` of the chosen tiles.
+#' @export
+#' @examples
+downsample_window <- function(pp, n_target = NULL, prop = NULL,
+                              tile_size = NULL, weighted = FALSE) {
+  .check_ppp(pp)
+  n <- spatstat.geom::npoints(pp)
+  tgt <- .resolve_target(n, n_target, prop)
+  if (tgt >= n) return(.tag(pp, "window", n))
+
+  W <- spatstat.geom::Window(pp)
+  bb <- spatstat.geom::Frame(pp)
+  if (is.null(tile_size)) {
+    tile_size <- sqrt(spatstat.geom::area(bb) / 100)
+  }
+  stopifnot(is.numeric(tile_size), length(tile_size) == 1, tile_size > 0)
+
+  xb <- seq(bb$xrange[1], bb$xrange[2] + tile_size, by = tile_size)
+  yb <- seq(bb$yrange[1], bb$yrange[2] + tile_size, by = tile_size)
+  ix <- findInterval(pp$x, xb, rightmost.closed = TRUE)
+  iy <- findInterval(pp$y, yb, rightmost.closed = TRUE)
+  tile_id <- paste(ix, iy, sep = "_")
+
+  counts <- table(tile_id)
+  ids <- names(counts)
+  prob <- if (weighted) as.numeric(counts) else NULL
+  ord <- if (length(ids) > 1) {
+    sample(ids, length(ids), prob = prob)
+  } else {
+    ids
+  }
+  k <- which(cumsum(as.numeric(counts[ord])) >= tgt)[1]
+  chosen <- ord[seq_len(k)]
+
+  ij <- do.call(rbind, strsplit(chosen, "_", fixed = TRUE))
+  ij <- matrix(as.integer(ij), ncol = 2)
+  tiles <- lapply(seq_len(nrow(ij)), function(r) {
+    spatstat.geom::owin(xb[ij[r, 1] + 0:1], yb[ij[r, 2] + 0:1])
+  })
+  Wnew <- spatstat.geom::intersect.owin(
+    W, do.call(spatstat.geom::union.owin, tiles)
+  )
+
+  keep <- tile_id %in% chosen
+  out <- pp[keep]
+  spatstat.geom::Window(out) <- Wnew
+  .tag(out, "window", n, tile_size = tile_size,
+       tiles = spatstat.geom::tess(tiles = tiles))
+}
+```
+
+```{r}
+#| label: examples-downsample_window
+
+library(spatstat.random)
+set.seed(1)
+X <- rpoispp(2000)
+Y <- downsample_window(X, prop = 0.25)
+plot(Y)
+```
+
+```{r}
+#| label: tests-downsample_window
+
+library(spatstat.random)
+library(spatstat.geom)
+
+make_marked <- function(n = 3000) {
+  X <- rpoispp(n)
+  marks(X) <- factor(sample(c("T", "B", "Tum"), npoints(X), replace = TRUE))
+  X
+}
+
+test_that("window downsampling keeps all points in the new window", {
+  set.seed(5)
+  X <- make_marked()
+  Y <- downsample_window(X, prop = 0.25)
+  expect_gte(npoints(Y), round(0.25 * npoints(X)))
+  expect_true(all(inside.owin(Y$x, Y$y, Window(Y))))
+  # every original point inside the new window has been kept
+  expect_equal(sum(inside.owin(X$x, X$y, Window(Y))), npoints(Y))
+  expect_s3_class(attr(Y, "downsample")$tiles, "tess")
+})
+
+test_that("window downsampling works on irregular windows", {
+  set.seed(6)
+  X <- rpoispp(2000, win = disc(1))
+  Y <- downsample_window(X, n_target = 400, tile_size = 0.3)
+  expect_gte(npoints(Y), 400)
+  expect_true(is.subset.owin(Window(Y), Window(X)))
+})
+```
+
+## Internal helpers
+
+```{r}
+#| label: function-downsample_helpers
+
+#' Internal helpers for downsampling
+#' @noRd
+.downsample_marks <- function(pp, fun, method, n_target, prop, marks, by_marks,
+                              ...) {
+  .check_ppp(pp)
+  if (!is.null(marks) || by_marks) {
+    m <- spatstat.geom::marks(pp)
+    if (!is.factor(m)) {
+      stop("`marks` and `by_marks` need a pattern with factor marks.",
+           call. = FALSE)
+    }
+  }
+  if (!is.null(marks)) {
+    missing_lev <- setdiff(marks, levels(m))
+    if (length(missing_lev) > 0) {
+      stop("Mark(s) not found: ", paste(missing_lev, collapse = ", "),
+           ". Available: ", paste(levels(m), collapse = ", "), call. = FALSE)
+    }
+    pp <- pp[m %in% marks]
+    spatstat.geom::marks(pp) <- factor(spatstat.geom::marks(pp),
+                                       levels = marks)
+  }
+  if (!by_marks) return(fun(pp, n_target = n_target, prop = prop, ...))
+
+  m <- spatstat.geom::marks(pp)
+  n_orig <- spatstat.geom::npoints(pp)
+  keep <- logical(n_orig)
+  for (lev in levels(m)) {
+    idx <- which(m == lev)
+    if (length(idx) == 0) next
+    # carry the original indices as marks, to map the kept points back
+    sub <- spatstat.geom::setmarks(pp[idx], idx)
+    sub_n <- if (is.null(n_target)) NULL else min(n_target, length(idx))
+    res <- fun(sub, n_target = sub_n, prop = prop, ...)
+    keep[spatstat.geom::marks(res)] <- TRUE
+  }
+  .tag(pp[keep], method, n_orig, by_marks = TRUE,
+       n_kept_by_mark = table(spatstat.geom::marks(pp)[keep]))
+}
+
+.check_ppp <- function(pp) {
+  if (!spatstat.geom::is.ppp(pp)) {
+    stop("`pp` must be a ppp object.", call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
+.resolve_target <- function(n, n_target, prop) {
+  if (is.null(n_target) == is.null(prop)) {
+    stop("Specify exactly one of `n_target` and `prop`.", call. = FALSE)
+  }
+  if (!is.null(prop)) {
+    if (!is.numeric(prop) || length(prop) != 1 || prop <= 0 || prop > 1) {
+      stop("`prop` must be a single number in (0, 1].", call. = FALSE)
+    }
+    n_target <- round(prop * n)
+  }
+  if (!is.numeric(n_target) || length(n_target) != 1 || n_target < 1) {
+    stop("`n_target` must be a single positive number.", call. = FALSE)
+  }
+  as.integer(min(n_target, n))
+}
+
+.recycle_arg <- function(x, n, name) {
+  if (is.null(x)) return(vector("list", n))
+  if (length(x) == 1) return(rep(list(x), n))
+  if (length(x) == n) return(as.list(x))
+  stop("`", name, "` must have length 1 or the same length as `pp`.",
+       call. = FALSE)
+}
+
+.tag <- function(out, method, n_orig, ...) {
+  attr(out, "downsample") <- c(
+    list(method = method, n_orig = n_orig,
+         n_kept = spatstat.geom::npoints(out)),
+    list(...)
+  )
+  out
+}
+```
+
+## Effect on the L-cross function
+
+On a real crop: the L-cross function between neoplastic and stromal cells on all the cells, after uniform thinning and after KDE downsampling (20% of the cells of each type). Negative values of L(r) - r mean that the two types are segregated. Uniform thinning gives the same curve up to noise; KDE downsampling pushes it towards 0, the value for homogeneous independent patterns, and hides the segregation.
+
+```{r}
+#| label: compare-lcross
+#| fig-width: 7
+#| fig-height: 5
+
+set.seed(1)
+pp3 <- tcga_crops[["TCGA-EM-A1YA"]]
+r <- seq(0, 150, length.out = 50)
+lc <- function(x) {
+  spatstat.explore::Lcross(x, "neoplastic", "stromal", r = r,
+                           correction = "border")$border
+}
+pp_uni <- downsample(pp3, "uniform", prop = 0.2, by_marks = TRUE)
+pp_kde <- downsample(pp3, "kde", prop = 0.2, by_marks = TRUE)
+
+curves <- cbind(all = lc(pp3), uniform = lc(pp_uni), kde = lc(pp_kde))
+matplot(r, curves - r, type = "l", lty = 1, lwd = 2, col = 1:3,
+        xlab = "r", ylab = "L(r) - r", main = "TCGA-EM-A1YA")
+abline(h = 0, lty = 2, col = "grey")
+legend("topleft", colnames(curves), col = 1:3, lty = 1, lwd = 2, bty = "n")
+```
+
+```{r}
+#| label: development-inflate
+#| eval: FALSE
+
+# Run but keep eval=FALSE to avoid infinite loop
+fusen::inflate(flat_file = "dev/flat_downsampling.qmd", vignette_name = "Downsampling")
+```

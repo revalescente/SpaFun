@@ -1,7 +1,6 @@
 ---
 title: "Functional Data Analysis and Clustering on L-cross Functions"
 author: "Valerio Reffo"
-date: "`r Sys.Date()`"
 format: html
 ---
 
@@ -20,8 +19,8 @@ library(testthat)
 #| message: false
 #| warning: false
 
+library(SpaFun)
 library(data.table)
-library(parallel)
 library(fda)
 library(ggplot2)
 library(dplyr)
@@ -30,16 +29,40 @@ library(tidyr)
 
 ## Data Loading
 
-We read the combined $L$-cross Kernel Density Estimation (KDE) data from the specified path in the document parameters.
+The input is a table with the column `r_value` and one column per slide with
+its L-cross function (see the "Lcross pipeline" vignette). On the HPC it is
+read from disk:
 
 ```{r}
-#| label: load-data
+#| label: hpc-load-data
+#| eval: false
 
-input_file <- "/projects/shared/TCGA_data/results/combined_Lcross_KDE.csv"
+input_file <- "/projects/shared/TCGA_data/results/combined_Lcross.csv"
 
 message("Reading data from: ", input_file)
 dt <- fread(input_file)
 message("Successfully loaded data with ", nrow(dt), " rows and ", ncol(dt), " columns.")
+```
+
+Here we build it from the 5 example crops in `tcga_crops`, so this vignette
+runs anywhere. With only 5 curves the analysis below is a demonstration:
+the full analysis uses all the TCGA slides.
+
+```{r}
+#| label: load-data
+
+data(tcga_crops)
+r_values <- seq(0, 150, length.out = 70)
+
+set.seed(10)
+subs <- downsample(tcga_crops, method = "uniform", n_target = 5000,
+                   marks = c("neoplastic", "stromal"), by_marks = TRUE)
+L_list <- lapply(subs, function(x) {
+  spatstat.explore::Lcross(x, i = "neoplastic", j = "stromal",
+                           r = r_values, correction = "border")$border
+})
+dt <- data.table(r_value = r_values, as.data.table(L_list))
+dim(dt)
 ```
 
 ## Functional Data Smoothing
@@ -184,13 +207,16 @@ smoothed_Lfun <- fsmooth(dt, M = 6, genLfun.fd = 4, centered = FALSE)
 
 ## Functional Principal Component Analysis (fPCA)
 
-We perform Functional PCA on the smoothed $L$-functions. Given the number of basis functions ($\text{length}(r) = 70$) and $M = 6$, the total number of basis functions is calculated as $K = 70 + 6 - 2 = 74$.
+We perform Functional PCA on the smoothed $L$-functions. The number of
+harmonics cannot exceed the number of curves: we use 3 with the 5 example
+curves (10 on the full TCGA data).
 
 ```{r}
 #| label: fpca-analysis
 
 # Run fPCA
-fpca <- pca.fd(smoothed_Lfun$fd, nharm = 10, smoothed_Lfun$fdPar)
+n_harm <- min(10, ncol(dt) - 2)
+fpca <- pca.fd(smoothed_Lfun$fd, nharm = n_harm, smoothed_Lfun$fdPar)
 
 # Assign sample names (excluding the 'r_values' column) to the PCA scores
 rownames(fpca$scores) <- colnames(dt)[-1]
@@ -198,7 +224,9 @@ rownames(fpca$scores) <- colnames(dt)[-1]
 
 ## Unsupervised Clustering
 
-We apply two different clustering techniques on specific dimensions of the fPCA scores (components 1 and 60) to classify the spatial patterns into 6 distinct groups.
+We apply two clustering techniques to the scores of the first two
+principal components. On the full data we look for 6 groups; with the 5
+example curves we use 2.
 
 ### K-means & Hierarchical Clustering
 
@@ -208,12 +236,15 @@ We apply two different clustering techniques on specific dimensions of the fPCA 
 # Set seed for reproducibility
 set.seed(123)
 
+# number of groups: 6 on the full data, fewer with the example curves
+k <- min(6, nrow(fpca$scores) - 3)
+
 # K-means clustering
-fpca_km <- kmeans(fpca$scores[, c(1, 10)], centers = 6)
+fpca_km <- kmeans(fpca$scores[, 1:2], centers = k)
 
 # Hierarchical clustering (Ward's method)
-fpca_hc <- hclust(dist(fpca$scores[, c(1, 10)]), method = "ward.D2")
-memb_hc <- cutree(fpca_hc, k = 6)
+fpca_hc <- hclust(dist(fpca$scores[, 1:2]), method = "ward.D2")
+memb_hc <- cutree(fpca_hc, k = k)
 ```
 
 ### Cluster Distribution Comparison
@@ -360,3 +391,12 @@ par(mfrow = c(1, 1))
 ```
 
 \n
+
+```{r}
+#| label: development-inflate
+#| eval: false
+
+# Run but keep eval=FALSE to avoid infinite loop
+fusen::inflate(flat_file = "dev/flat_fda_pipeline.qmd",
+               vignette_name = "FDA pipeline")
+```

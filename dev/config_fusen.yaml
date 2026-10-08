@@ -1,3 +1,27 @@
+flat_downsampling.qmd:
+  path: dev/flat_downsampling.qmd
+  state: active
+  R:
+  - R/downsample_marks.R
+  - R/downsample.R
+  - R/downsample_kde.R
+  - R/downsample_uniform.R
+  - R/downsample_window.R
+  tests:
+  - tests/testthat/test-downsample.R
+  - tests/testthat/test-downsample_uniform.R
+  - tests/testthat/test-downsample_kde.R
+  - tests/testthat/test-downsample_window.R
+  vignettes: vignettes/downsampling.Rmd
+  inflate:
+    flat_file: dev/flat_downsampling.qmd
+    vignette_name: Downsampling
+    open_vignette: true
+    check: true
+    document: true
+    overwrite: 'yes'
+    clean: ask
+    codecov: false
 flat_fda_pipeline.qmd:
   path: dev/flat_fda_pipeline.qmd
   state: active
@@ -5,12 +29,12 @@ flat_fda_pipeline.qmd:
   - R/fsmooth.R
   - R/plot_smoothed_lfun.R
   tests: []
-  vignettes: vignettes/dev-fda_pipeline.Rmd
+  vignettes: vignettes/fda-pipeline.Rmd
   inflate:
     flat_file: dev/flat_fda_pipeline.qmd
-    vignette_name: dev-fda_pipeline
+    vignette_name: FDA pipeline
     open_vignette: true
-    check: false
+    check: true
     document: true
     overwrite: 'yes'
     clean: ask
@@ -18,16 +42,36 @@ flat_fda_pipeline.qmd:
 flat_Lcross_pipeline.qmd:
   path: dev/flat_Lcross_pipeline.qmd
   state: active
-  R:
-  - R/ann2ppp.R
-  - R/downsample_kde.R
+  R: []
   tests: []
-  vignettes: vignettes/dev-lcross_pipeline.Rmd
+  vignettes: vignettes/lcross-pipeline.Rmd
   inflate:
     flat_file: dev/flat_Lcross_pipeline.qmd
-    vignette_name: dev-Lcross_pipeline
+    vignette_name: Lcross pipeline
     open_vignette: true
-    check: false
+    check: true
+    document: true
+    overwrite: 'yes'
+    clean: ask
+    codecov: false
+flat_read_data.qmd:
+  path: dev/flat_read_data.qmd
+  state: active
+  R:
+  - R/resolve_mask_scale.R
+  - R/ann2ppp.R
+  - R/cells2ppp.R
+  - R/read_cells_h5ad.R
+  - R/example-data.R
+  tests:
+  - tests/testthat/test-read_cells_h5ad.R
+  - tests/testthat/test-cells2ppp.R
+  vignettes: []
+  inflate:
+    flat_file: dev/flat_read_data.qmd
+    vignette_name: .na
+    open_vignette: true
+    check: true
     document: true
     overwrite: 'yes'
     clean: ask
