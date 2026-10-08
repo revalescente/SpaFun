@@ -1,0 +1,25 @@
+<urlset xmlns = 'http://www.sitemaps.org/schemas/sitemap/0.9'>
+<url><loc>https://revalescente.github.io/SpaFun/404.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/CODE_OF_CONDUCT.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/LICENSE.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/articles/downsampling.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/articles/fda-pipeline.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/articles/index.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/articles/lcross-pipeline.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/authors.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/index.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/news/index.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/reference/SpaFun-package.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/reference/ann2ppp.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/reference/cells2ppp.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/reference/downsample.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/reference/downsample_KDE.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/reference/downsample_uniform.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/reference/downsample_window.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/reference/fsmooth.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/reference/index.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/reference/plot_smoothed_Lfun.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/reference/read_cells_h5ad.html</loc></url>
+<url><loc>https://revalescente.github.io/SpaFun/reference/tcga_crops.html</loc></url>
+</urlset>
+
