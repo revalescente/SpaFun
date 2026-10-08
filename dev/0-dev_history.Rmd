@@ -73,7 +73,7 @@ fusen::inflate(flat_file = "dev/flat_Lcross_pipeline.qmd",
                overwrite = T)
 ```
 
-finche non risolvo il problema dei dati per le vignette
+finche non risolvo il problema dei dati per le vignette su mac-mini
 ```{r}
 fusen::inflate(flat_file = "dev/flat_Lcross_pipeline.qmd",
                vignette_name = "dev-Lcross_pipeline",

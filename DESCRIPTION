@@ -1,6 +1,6 @@
 Package: SpaFun
 Title: Spatial Point Pattern Analysis with FDA
-Version: 0.1
+Version: 0.0.0.9000
 Authors@R: 
     person("Valerio", "Reffo", , "valerio.reffo@phd.unipd.it", role = c("aut", "cre"),
            comment = c(ORCID = "0009-0006-8690-7018"))
