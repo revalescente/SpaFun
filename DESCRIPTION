@@ -4,7 +4,7 @@ Version: 0.0.0.9000
 Authors@R: 
     person("Valerio", "Reffo", , "valerio.reffo@phd.unipd.it", role = c("aut", "cre"),
            comment = c(ORCID = "0009-0006-8690-7018"))
-Description: Function to analyse TCGA dataset.
+Description: Methods to analyse multiple spatial point processes as functional data.
 URL: https://github.com/revalescente/SpaFun, https://revalescente.github.io/SpaFun/
 BugReports: https://github.com/revalescente/SpaFun/issues
 License: GPL (>= 3)
