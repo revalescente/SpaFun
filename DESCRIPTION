@@ -4,7 +4,7 @@ Version: 0.0.0.9000
 Authors@R: 
     person("Valerio", "Reffo", , "valerio.reffo@phd.unipd.it", role = c("aut", "cre"),
            comment = c(ORCID = "0009-0006-8690-7018"))
-Description: Function to analyse TCGA dataset.
+Description: Methods to analyse multiple spatial point processes as functional data. 
 License: GPL (>= 3)
 Imports: 
     anndataR,
