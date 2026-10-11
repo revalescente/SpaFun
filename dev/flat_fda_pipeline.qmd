@@ -73,8 +73,9 @@ We apply the `fsmooth` function to convert the raw data points into a continuous
 #| label: function-fsmooth
 
 #' fsmooth Function to convert a vector of data points into a continuous functional object 
+#' It need a column to be the vector of r values, named "r_values"
 #' 
-#' @param dt object of class data.table with dimensions number of data point per number of samples
+#' @param df object of class data.frame or data.table
 #' @param M spline order (norder)
 #' @param genLfun.fd Lfdobj for fdPar
 #' @param centered center by r before smoothing
@@ -89,27 +90,28 @@ We apply the `fsmooth` function to convert the raw data points into a continuous
 #' @export
 
 fsmooth <- function(
-  dt,
+  df,
   M = 6,                  # spline order (norder)
   genLfun.fd = 4,         # Lfdobj for fdPar
+  r_value = NULL,         # vector of r values
   centered = FALSE,       # center by r before smoothing
   nbasis = NULL,          # allow user to set number of basis functions
   breaks = NULL,          # alternative: provide a coarser breaks vector
   lambda = NULL,          # smoothing penalty; if NULL a default is chosen
   rangeval = NULL,        # override range(r) if desired
-  verbose = FALSE,
+  verbose = TRUE,
   ...
 ) {
   # 1. Robustly extract r
-  if ("r_value" %in% names(dt)) {
-    r <- dt$r_value
-  } else {
-    if (verbose) message("Warning: 'r_value' column not found; using first column as r")
-    r <- dt[[1]]
+  rvals <- if (is.null(r_value)) "r_value" else r_value
+  if (!rvals %in% names(df)) {
+    if (verbose) message("Warning: colonna '", rvals, "' non trovata")
+    return(invisible(NULL))
   }
-
-  # 2. Extract functional matrix (all columns after the first)
-  mat_fun <- as.matrix(dt[, -1, with = FALSE])
+  r <- df[[rvals]]
+  
+  # 2. Extract functional matrix (all columns other then r_values)
+  mat_fun <- as.matrix(as.data.frame(df)[setdiff(names(df), rvals)])
   if (is.null(colnames(mat_fun))) {
     colnames(mat_fun) <- paste0("S", seq_len(ncol(mat_fun)))
   }
@@ -175,10 +177,10 @@ fsmooth <- function(
   Genfun.fd <- genfdSmooth$fd
 
   # 8. Set names defensively
-  fdn_dist <- paste("Distanza (da 0 a", max(r, na.rm = TRUE), "micron)")
+  fdn_dist <- paste("Distance (from 0 to", max(r, na.rm = TRUE), "micron)")
   fdnames <- list(fdn_dist,
                   "Sample" = colnames(mat_fun),
-                  "Funzione")
+                  "Function")
   Genfun.fd$fdnames <- fdnames
 
   # 9. Basic sanity checks
