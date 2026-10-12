@@ -1,3 +1,3 @@
-# SpaFun 0.1
+# SpaFun 0.0.0.9000
 
-* Initial CRAN submission.
+* Building of the infrastructure
