@@ -71,7 +71,7 @@ smoothed_Lfun <- funSmooth(dt, norder = 4, Lfdobj = 2, fun_type = "L",
                            centered = FALSE, to_micron = TRUE, magnif = 40)
 #> Converted from pixel to micron: mpp = 0.25
 #> lambda chosen by GCV: 0.0715 (df = 16.27)
-#> Finished smoothing: nbasis=17, lambda=0.071492624883063
+#> Finished smoothing: nbasis=17, lambda=0.071492624877918
 smoothed_Lfun
 #> <spafun_fd> 5 curves
 #>   r:          [0, 37.5] micron, 70 points (converted from pixel, mpp = 0.25)
