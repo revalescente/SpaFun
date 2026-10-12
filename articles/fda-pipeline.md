@@ -55,14 +55,30 @@ dim(dt)
 
 ## Functional Data Smoothing
 
-We apply the `fsmooth` function to convert the raw data points into a
-continuous functional data object.
+We apply
+[`funSmooth()`](https://revalescente.github.io/SpaFun/reference/funSmooth.md)
+to convert the raw data points into a continuous functional data object
+(penalised B-splines, see
+[`?funSmooth`](https://revalescente.github.io/SpaFun/reference/funSmooth.md)).
+The coordinates of the TCGA slides are pixels at 40x: with
+`to_micron = TRUE` and `magnif = 40` the grid `r` and the L values
+(lengths) are converted to microns, assuming 0.25 micron/pixel at 40x
+(`mpp_ref`; set `mpp` if the scanner resolution is known).
 
 ``` r
 
-message("Applying fsmooth function...")
-#> Applying fsmooth function...
-smoothed_Lfun <- fsmooth(dt, M = 6, genLfun.fd = 4, centered = FALSE)
+smoothed_Lfun <- funSmooth(dt, norder = 4, Lfdobj = 2, fun_type = "L",
+                           centered = FALSE, to_micron = TRUE, magnif = 40)
+#> Converted from pixel to micron: mpp = 0.25
+#> lambda chosen by GCV: 0.0715 (df = 16.27)
+#> Finished smoothing: nbasis=17, lambda=0.071492624883063
+smoothed_Lfun
+#> <spafun_fd> 5 curves
+#>   r:          [0, 37.5] micron, 70 points (converted from pixel, mpp = 0.25)
+#>   function:   L(r) (micron)
+#>   centered:   no
+#>   basis:      B-spline, order 4, 17 basis functions
+#>   penalty:    derivative 2, lambda = 0.0715 (GCV, df = 16.27)
 ```
 
 ## Functional Principal Component Analysis (fPCA)
@@ -143,7 +159,7 @@ plot_smoothed_Lfun(
   clusters_vec = fpca_km$cluster, 
   mark_i = "neoplastic",  
   mark_j = "stromal",
-  center_plot = TRUE      # Subtracts 'r' since centered = FALSE in fsmooth
+  center_plot = TRUE      # Subtracts 'r' (funSmooth was run with centered = FALSE)
 )
 ```
 

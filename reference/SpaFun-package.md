@@ -1,6 +1,6 @@
 # SpaFun: Spatial Point Pattern Analysis with FDA
 
-Function to analyse TCGA dataset.
+Methods to analyse multiple spatial point processes as functional data.
 
 ## See also
 

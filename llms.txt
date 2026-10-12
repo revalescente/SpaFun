@@ -64,13 +64,17 @@ files, so they display on GitHub and CRAN.
   : Uniform random downsampling
 - [`downsample_window()`](https://revalescente.github.io/SpaFun/reference/downsample_window.md)
   : Downsampling by sub-windows
-- [`fsmooth()`](https://revalescente.github.io/SpaFun/reference/fsmooth.md)
-  : fsmooth Function to convert a vector of data points into a
-  continuous functional object
+- [`funSmooth()`](https://revalescente.github.io/SpaFun/reference/funSmooth.md)
+  : Smooth curves observed on a common grid into a functional data
+  object
 - [`plot_smoothed_Lfun()`](https://revalescente.github.io/SpaFun/reference/plot_smoothed_Lfun.md)
   : plot_smoothed_Lfun Function to plot the smoothed Lcross object
 - [`read_cells_h5ad()`](https://revalescente.github.io/SpaFun/reference/read_cells_h5ad.md)
   : Read cell centroids and labels from an h5ad file
+- [`print(`*`<spafun_fd>`*`)`](https://revalescente.github.io/SpaFun/reference/spafun_fd-methods.md)
+  [`as.data.frame(`*`<spafun_fd>`*`)`](https://revalescente.github.io/SpaFun/reference/spafun_fd-methods.md)
+  [`plot(`*`<spafun_fd>`*`)`](https://revalescente.github.io/SpaFun/reference/spafun_fd-methods.md)
+  : Methods for smoothed curves
 - [`tcga_crops`](https://revalescente.github.io/SpaFun/reference/tcga_crops.md)
   : Example crops of five TCGA slides
 

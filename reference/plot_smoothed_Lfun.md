@@ -18,12 +18,13 @@ plot_smoothed_Lfun(
 
 - smoothed_obj:
 
-  list with elements "r", breaks vector, and "fd", object of the fd
-  class
+  A `spafun_fd` object from
+  [`funSmooth()`](https://revalescente.github.io/SpaFun/reference/funSmooth.md)
+  (or a list with elements `r` and `fd`).
 
 - clusters_vec:
 
-  vector of cluster value for each sample
+  vector of cluster value for each sample, named after the samples
 
 - mark_i:
 
@@ -35,7 +36,10 @@ plot_smoothed_Lfun(
 
 - center_plot:
 
-  to choose if you want the plot centered (L-r ~ r) or not.
+  to choose if you want the plot centered (L-r ~ r) or not. If the
+  curves were already centered in
+  [`funSmooth()`](https://revalescente.github.io/SpaFun/reference/funSmooth.md)
+  (`centered = TRUE`), they are not centered again.
 
 ## Value
 
