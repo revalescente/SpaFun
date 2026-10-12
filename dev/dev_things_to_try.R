@@ -80,3 +80,9 @@ Y_smooth <- eval.fd(tt, res$fd)
 rmse <- function(a, b) sqrt(mean((a - b)^2))
 rmse(Y_smooth, Y_true)
 rmse(eval.fd(tt, fit_fda$fd), Y_true)
+
+# test lambdaRamsay
+
+basis  <- create.bspline.basis(range(tt), norder = 4, breaks = tt)
+dfRange = c(2.5, 0.5 * length(tt))
+res2 <- lambdaRamsay(df, rValues = tt, sBasis = basis, Lfd = 2)
