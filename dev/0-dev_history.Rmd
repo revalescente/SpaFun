@@ -115,6 +115,13 @@ This will put everything in the right place to get started. We then continue by
 adding the FDA pipeline (it uses `downsample()`, so inflate it after the
 downsampling flat file).
 
+Then we inflate 
+```{r inflate-downsampling, eval=FALSE}
+fusen::inflate(flat_file = "dev/flat_funSmooth.qmd", 
+               vignette_name = NA,
+               overwrite = TRUE)
+```
+
 ```{r inflate-fda_pipeline, eval=FALSE}
 # Run but keep eval=FALSE to avoid infinite loop
 # Execute in the console directly

@@ -13,15 +13,15 @@ plot_smoothed_Lfun(
 )
 }
 \arguments{
-\item{smoothed_obj}{list with elements "r", breaks vector, and "fd", object of the fd class}
+\item{smoothed_obj}{A \code{spafun_fd} object from \code{\link[=funSmooth]{funSmooth()}} (or a list with elements \code{r} and \code{fd}).}
 
-\item{clusters_vec}{vector of cluster value for each sample}
+\item{clusters_vec}{vector of cluster value for each sample, named after the samples}
 
 \item{mark_i}{name of the mark value for which the Lcross function was calculated}
 
 \item{mark_j}{name of the mark value for which the Lcross function was calculated}
 
-\item{center_plot}{to choose if you want the plot centered (L-r ~ r) or not.}
+\item{center_plot}{to choose if you want the plot centered (L-r ~ r) or not. If the curves were already centered in \code{funSmooth()} (\code{centered = TRUE}), they are not centered again.}
 }
 \value{
 A ggplot object

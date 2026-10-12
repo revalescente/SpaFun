@@ -4,11 +4,11 @@ utils::globalVariables(c("r", "L_value", "L_plot_value", "Slide", "cluster"))
 
 #' plot_smoothed_Lfun Function to plot the smoothed Lcross object
 #' 
-#' @param smoothed_obj list with elements "r", breaks vector, and "fd", object of the fd class
-#' @param clusters_vec vector of cluster value for each sample
+#' @param smoothed_obj A `spafun_fd` object from [funSmooth()] (or a list with elements `r` and `fd`).
+#' @param clusters_vec vector of cluster value for each sample, named after the samples
 #' @param mark_i name of the mark value for which the Lcross function was calculated
 #' @param mark_j name of the mark value for which the Lcross function was calculated
-#' @param center_plot to choose if you want the plot centered (L-r ~ r) or not. 
+#' @param center_plot to choose if you want the plot centered (L-r ~ r) or not. If the curves were already centered in `funSmooth()` (`centered = TRUE`), they are not centered again.
 #' @importFrom fda eval.fd
 #' @importFrom tidyr pivot_longer
 #' @importFrom dplyr mutate left_join
@@ -38,10 +38,13 @@ plot_smoothed_Lfun <- function(smoothed_obj, clusters_vec, mark_i = "Mark 1", ma
     values_to = "L_value"
   )
   
-  # 4. Center the L-function (L(r) - r) if requested 
-  # (Since you ran fsmooth with centered = FALSE, we can center it visually here)
-  if (center_plot) {
+  # 4. Center the L-function (L(r) - r) if requested, using the flag stored
+  # by funSmooth to avoid centering twice
+  already_centered <- isTRUE(smoothed_obj$centered)
+  if (center_plot && !already_centered) {
     df_long <- df_long |> mutate(L_plot_value = L_value - r)
+  } else if (!center_plot && already_centered) {
+    df_long <- df_long |> mutate(L_plot_value = L_value + r)
   } else {
     df_long <- df_long |> mutate(L_plot_value = L_value)
   }
@@ -56,7 +59,8 @@ plot_smoothed_Lfun <- function(smoothed_obj, clusters_vec, mark_i = "Mark 1", ma
   df_final <- df_long |> 
     left_join(cluster_df, by = "Slide")
   
-  # 7. Build the ggplot
+  # 7. Build the ggplot, with the unit of r if known
+  unit_lab <- if (!is.null(smoothed_obj$unit)) paste0(" (", smoothed_obj$unit, ")") else ""
   p <- ggplot(df_final, aes(x = r, y = L_plot_value, group = Slide, color = cluster)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
     geom_line(alpha = 0.7, linewidth = 0.6) + 
@@ -66,8 +70,8 @@ plot_smoothed_Lfun <- function(smoothed_obj, clusters_vec, mark_i = "Mark 1", ma
       subtitle = ifelse(center_plot, 
                         "Centered L-function (L(r) - r). Positive = Attraction, Negative = Repulsion", 
                         "L-function L(r)"),
-      x = "Radius (r)",
-      y = ifelse(center_plot, "L(r) - r", "L(r)"),
+      x = paste0("Radius r", unit_lab),
+      y = paste0(ifelse(center_plot, "L(r) - r", "L(r)"), unit_lab),
       color = "Cluster"
     ) +
     theme(legend.position = "right")

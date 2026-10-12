@@ -25,14 +25,33 @@ flat_downsampling.qmd:
 flat_fda_pipeline.qmd:
   path: dev/flat_fda_pipeline.qmd
   state: active
-  R:
-  - R/fsmooth.R
-  - R/plot_smoothed_lfun.R
+  R: R/plot_smoothed_lfun.R
   tests: []
   vignettes: vignettes/fda-pipeline.Rmd
   inflate:
     flat_file: dev/flat_fda_pipeline.qmd
     vignette_name: FDA pipeline
+    open_vignette: true
+    check: true
+    document: true
+    overwrite: 'yes'
+    clean: ask
+    codecov: false
+flat_funSmooth.qmd:
+  path: dev/flat_funSmooth.qmd
+  state: active
+  R:
+  - R/funsmooth.R
+  - R/lambdaramsay.R
+  - R/spafun_fd-methods.R
+  tests:
+  - tests/testthat/test-funsmooth.R
+  - tests/testthat/test-spafun_fd-methods.R
+  - tests/testthat/test-lambdaramsay.R
+  vignettes: []
+  inflate:
+    flat_file: dev/flat_funSmooth.qmd
+    vignette_name: .na
     open_vignette: true
     check: true
     document: true

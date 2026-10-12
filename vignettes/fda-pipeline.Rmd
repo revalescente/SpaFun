@@ -76,11 +76,16 @@ dim(dt)
 
 ## Functional Data Smoothing
 
-We apply the `fsmooth` function to convert the raw data points into a continuous functional data object.
-
+We apply `funSmooth()` to convert the raw data points into a continuous
+functional data object (penalised B-splines, see `?funSmooth`). The
+coordinates of the TCGA slides are pixels at 40x: with `to_micron = TRUE`
+and `magnif = 40` the grid `r` and the L values (lengths) are converted to
+microns, assuming 0.25 micron/pixel at 40x (`mpp_ref`; set `mpp` if the
+scanner resolution is known).
 ```{r fda-smoothing}
-message("Applying fsmooth function...")
-smoothed_Lfun <- fsmooth(dt, M = 6, genLfun.fd = 4, centered = FALSE)
+smoothed_Lfun <- funSmooth(dt, norder = 4, Lfdobj = 2, fun_type = "L",
+                           centered = FALSE, to_micron = TRUE, magnif = 40)
+smoothed_Lfun
 ```
 
 
@@ -151,7 +156,7 @@ plot_smoothed_Lfun(
   clusters_vec = fpca_km$cluster, 
   mark_i = "neoplastic",  
   mark_j = "stromal",
-  center_plot = TRUE      # Subtracts 'r' since centered = FALSE in fsmooth
+  center_plot = TRUE      # Subtracts 'r' (funSmooth was run with centered = FALSE)
 )
 
 ```

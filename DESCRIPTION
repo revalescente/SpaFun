@@ -4,11 +4,12 @@ Version: 0.0.0.9000
 Authors@R: 
     person("Valerio", "Reffo", , "valerio.reffo@phd.unipd.it", role = c("aut", "cre"),
            comment = c(ORCID = "0009-0006-8690-7018"))
-Description: Methods to analyse multiple spatial point processes as functional data.
-URL: https://github.com/revalescente/SpaFun, https://revalescente.github.io/SpaFun/
-BugReports: https://github.com/revalescente/SpaFun/issues
+Description: Methods to analyse multiple spatial point processes as
+    functional data.
 License: GPL (>= 3)
-biocViews:
+URL: https://github.com/revalescente/SpaFun,
+    https://revalescente.github.io/SpaFun/
+BugReports: https://github.com/revalescente/SpaFun/issues
 Depends: 
     R (>= 3.5)
 Imports: 
@@ -32,6 +33,7 @@ Suggests:
     testthat
 VignetteBuilder: 
     knitr
+biocViews:
 Config/fusen/version: 0.7.2
 Config/roxygen2/version: 8.1.0
 Encoding: UTF-8

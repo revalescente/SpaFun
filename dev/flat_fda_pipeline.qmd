@@ -67,144 +67,19 @@ dim(dt)
 
 ## Functional Data Smoothing
 
-We apply the `fsmooth` function to convert the raw data points into a continuous functional data object.
-
-```{r}
-#| label: function-fsmooth
-
-#' fsmooth Function to convert a vector of data points into a continuous functional object 
-#' It need a column to be the vector of r values, named "r_values"
-#' 
-#' @param df object of class data.frame or data.table
-#' @param M spline order (norder)
-#' @param genLfun.fd Lfdobj for fdPar
-#' @param centered center by r before smoothing
-#' @param nbasis allow user to set number of basis functions
-#' @param breaks provide a coarser breaks vector
-#' @param lambda smoothing penalty; if NULL a default is chosen
-#' @param rangeval override range(r) if desired
-#' @param verbose verbose true or false
-#' @param ... other arguments for smooth.basis function
-#' @importFrom fda create.bspline.basis fdPar smooth.basis
-#' @return A list with the fd objects and the original matrix and r vector
-#' @export
-
-fsmooth <- function(
-  df,
-  M = 6,                  # spline order (norder)
-  genLfun.fd = 4,         # Lfdobj for fdPar
-  r_value = NULL,         # vector of r values
-  centered = FALSE,       # center by r before smoothing
-  nbasis = NULL,          # allow user to set number of basis functions
-  breaks = NULL,          # alternative: provide a coarser breaks vector
-  lambda = NULL,          # smoothing penalty; if NULL a default is chosen
-  rangeval = NULL,        # override range(r) if desired
-  verbose = TRUE,
-  ...
-) {
-  # 1. Robustly extract r
-  rvals <- if (is.null(r_value)) "r_value" else r_value
-  if (!rvals %in% names(df)) {
-    if (verbose) message("Warning: colonna '", rvals, "' non trovata")
-    return(invisible(NULL))
-  }
-  r <- df[[rvals]]
-  
-  # 2. Extract functional matrix (all columns other then r_values)
-  mat_fun <- as.matrix(as.data.frame(df)[setdiff(names(df), rvals)])
-  if (is.null(colnames(mat_fun))) {
-    colnames(mat_fun) <- paste0("S", seq_len(ncol(mat_fun)))
-  }
-
-  # 3. Optional centering
-  if (isTRUE(centered)) {
-    mat_fun <- sweep(mat_fun, MARGIN = 1, STATS = r, FUN = "-")
-  }
-
-  # 4. Determine range
-  if (is.null(rangeval)) rangeval <- range(r, na.rm = TRUE)
-
-  # 5. Choose nbasis sensibly if not provided
-  n_r <- length(r)
-  if (!is.null(breaks)) {
-    # If the user supplied breaks, follow fda convention
-    nbasis_calc <- length(breaks) + M - 2
-    if (verbose) message("Using user-supplied breaks; nbasis computed as: ", nbasis_calc)
-    genbasis <- create.bspline.basis(rangeval = rangeval, nbasis = nbasis_calc, norder = M, breaks = breaks)
-  } else {
-    if (!is.null(nbasis)) {
-      nbasis_calc <- nbasis
-    } else {
-      # default heuristic: up to 30 bases but not larger than roughly n_r/4
-      nbasis_calc <- min(30, max(M + 1, floor(n_r / 4)))
-    }
-    if (nbasis_calc >= n_r) {
-      if (verbose) message("nbasis (", nbasis_calc, ") >= number of observations (", n_r, "); reducing nbasis to avoid overparameterization")
-      nbasis_calc <- max(M + 1, n_r - 1)
-    }
-    genbasis <- create.bspline.basis(rangeval = rangeval, nbasis = nbasis_calc, norder = M)
-  }
-
-  # 6. Choose lambda if not provided (avoid near-interpolation)
-  if (is.null(lambda)) {
-    # A conservative default that provides some smoothing; users may increase
-    # but avoid values like 1e-11 which effectively disable penalization
-    lambda_val <- 1e-6
-  } else {
-    lambda_val <- lambda
-  }
-
-  genfdPar <- fdPar(genbasis, genLfun.fd, lambda = lambda_val)
-
-  # 7. Try smoothing with fallback strategies on error
-  genfdSmooth <- tryCatch(
-    smooth.basis(argvals = r, y = mat_fun, fdParobj = genfdPar, ...),
-    error = function(e) {
-      if (verbose) message("smooth.basis failed: ", conditionMessage(e), "; retrying with larger lambda and Lfdobj=2")
-      # fallback: increase penalty and use Lfdobj=2
-      tryCatch(
-        {
-          genfdPar2 <- fdPar(genbasis, Lfdobj = 2, lambda = max(lambda_val, 1e-4))
-          smooth.basis(argvals = r, y = mat_fun, fdParobj = genfdPar2, ...)
-        },
-        error = function(e2) {
-          stop("Both primary and fallback smoothing attempts failed: ", conditionMessage(e2))
-        }
-      )
-    }
-  )
-
-  Genfun.fd <- genfdSmooth$fd
-
-  # 8. Set names defensively
-  fdn_dist <- paste("Distance (from 0 to", max(r, na.rm = TRUE), "micron)")
-  fdnames <- list(fdn_dist,
-                  "Sample" = colnames(mat_fun),
-                  "Function")
-  Genfun.fd$fdnames <- fdnames
-
-  # 9. Basic sanity checks
-  if (!is.null(Genfun.fd$coefs)) {
-    n_coefs <- ncol(Genfun.fd$coefs)
-    if (ncol(mat_fun) != n_coefs) {
-      if (verbose) message("Warning: number of functions in mat_fun (", ncol(mat_fun), ") != number of fd coefficient columns (", n_coefs, ")")
-    } else {
-      if (verbose) message("Finished smoothing: nbasis=", genbasis$nbasis, ", lambda=", lambda_val)
-    }
-  } else {
-    if (verbose) message("Finished smoothing but fd$coefs is NULL")
-  }
-
-  return(list(fd = Genfun.fd, fdPar = genfdPar, basis = genbasis, mat = mat_fun, r = r))
-}
-```
-
+We apply `funSmooth()` to convert the raw data points into a continuous
+functional data object (penalised B-splines, see `?funSmooth`). The
+coordinates of the TCGA slides are pixels at 40x: with `to_micron = TRUE`
+and `magnif = 40` the grid `r` and the L values (lengths) are converted to
+microns, assuming 0.25 micron/pixel at 40x (`mpp_ref`; set `mpp` if the
+scanner resolution is known).
 
 ```{r}
 #| label: fda-smoothing
 
-message("Applying fsmooth function...")
-smoothed_Lfun <- fsmooth(dt, M = 6, genLfun.fd = 4, centered = FALSE)
+smoothed_Lfun <- funSmooth(dt, norder = 4, Lfdobj = 2, fun_type = "L",
+                           centered = FALSE, to_micron = TRUE, magnif = 40)
+smoothed_Lfun
 ```
 
 ## Functional Principal Component Analysis (fPCA)
@@ -278,16 +153,16 @@ utils::globalVariables(c("r", "L_value", "L_plot_value", "Slide", "cluster"))
 
 #' plot_smoothed_Lfun Function to plot the smoothed Lcross object
 #' 
-#' @param smoothed_obj list with elements "r", breaks vector, and "fd", object of the fd class
-#' @param clusters_vec vector of cluster value for each sample
+#' @param smoothed_obj A `spafun_fd` object from [funSmooth()] (or a list with elements `r` and `fd`).
+#' @param clusters_vec vector of cluster value for each sample, named after the samples
 #' @param mark_i name of the mark value for which the Lcross function was calculated
 #' @param mark_j name of the mark value for which the Lcross function was calculated
-#' @param center_plot to choose if you want the plot centered (L-r ~ r) or not. 
+#' @param center_plot to choose if you want the plot centered (L-r ~ r) or not. If the curves were already centered in `funSmooth()` (`centered = TRUE`), they are not centered again.
 #' @importFrom fda eval.fd
 #' @importFrom tidyr pivot_longer
 #' @importFrom dplyr mutate left_join
 #' @importFrom ggplot2 ggplot geom_hline geom_line theme_minimal labs theme aes 
-#' #' @importFrom utils globalVariables
+#' @importFrom utils globalVariables
 #' @return A ggplot object
 #' @export
 
@@ -312,10 +187,13 @@ plot_smoothed_Lfun <- function(smoothed_obj, clusters_vec, mark_i = "Mark 1", ma
     values_to = "L_value"
   )
   
-  # 4. Center the L-function (L(r) - r) if requested 
-  # (Since you ran fsmooth with centered = FALSE, we can center it visually here)
-  if (center_plot) {
+  # 4. Center the L-function (L(r) - r) if requested, using the flag stored
+  # by funSmooth to avoid centering twice
+  already_centered <- isTRUE(smoothed_obj$centered)
+  if (center_plot && !already_centered) {
     df_long <- df_long |> mutate(L_plot_value = L_value - r)
+  } else if (!center_plot && already_centered) {
+    df_long <- df_long |> mutate(L_plot_value = L_value + r)
   } else {
     df_long <- df_long |> mutate(L_plot_value = L_value)
   }
@@ -330,7 +208,8 @@ plot_smoothed_Lfun <- function(smoothed_obj, clusters_vec, mark_i = "Mark 1", ma
   df_final <- df_long |> 
     left_join(cluster_df, by = "Slide")
   
-  # 7. Build the ggplot
+  # 7. Build the ggplot, with the unit of r if known
+  unit_lab <- if (!is.null(smoothed_obj$unit)) paste0(" (", smoothed_obj$unit, ")") else ""
   p <- ggplot(df_final, aes(x = r, y = L_plot_value, group = Slide, color = cluster)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
     geom_line(alpha = 0.7, linewidth = 0.6) + 
@@ -340,8 +219,8 @@ plot_smoothed_Lfun <- function(smoothed_obj, clusters_vec, mark_i = "Mark 1", ma
       subtitle = ifelse(center_plot, 
                         "Centered L-function (L(r) - r). Positive = Attraction, Negative = Repulsion", 
                         "L-function L(r)"),
-      x = "Radius (r)",
-      y = ifelse(center_plot, "L(r) - r", "L(r)"),
+      x = paste0("Radius r", unit_lab),
+      y = paste0(ifelse(center_plot, "L(r) - r", "L(r)"), unit_lab),
       color = "Cluster"
     ) +
     theme(legend.position = "right")
@@ -361,7 +240,7 @@ plot_smoothed_Lfun(
   clusters_vec = fpca_km$cluster, 
   mark_i = "neoplastic",  
   mark_j = "stromal",
-  center_plot = TRUE      # Subtracts 'r' since centered = FALSE in fsmooth
+  center_plot = TRUE      # Subtracts 'r' (funSmooth was run with centered = FALSE)
 )
 
 ```
