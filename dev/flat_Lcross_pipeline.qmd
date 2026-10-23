@@ -15,8 +15,7 @@ This pipeline reads the cells of a slide and its tissue mask, builds a point
 pattern, reduces the number of cells and estimates the L-cross function
 between two cell types (here neoplastic and stromal cells).
 
-The code runs on the example data shipped with the package. The chunks that
-work on the full TCGA data on the HPC are shown but not run (`eval: false`).
+The code runs on the example data shipped with the package.
 
 ## Setup
 
@@ -35,27 +34,8 @@ library(spatstat.explore)
 thumbnails at 1.25x and the coordinates are at 40x, so each mask pixel is
 40 / 1.25 = 32 coordinate units.
 
-On the HPC, for one slide:
-
-```{r}
-#| label: hpc-paths
-#| eval: false
-
-sample_dir <- "/projects/shared/TCGA_data/h5ad/TCGA-TS-A7P8-01Z-00-DX1.25E9AFA9-6C12-4F18-BE79-2F4F19887ECD.h5ad.gz"
-save_dir   <- "/projects/shared/TCGA_data/results/test"
-
-file_name <- sub("\\.h5ad\\.gz$", ".rds", basename(sample_dir))
-save_path <- file.path(save_dir, file_name)
-
-mask_path <- sub("/h5ad/", "/mask/", sample_dir)
-mask_path <- sub("\\.h5ad\\.gz$", ".png", mask_path)
-
-pp_object <- ann2ppp(sample_dir, mask = mask_path, magnif = 40,
-                     thumb_mag = 1.25, marks_col = "type")
-```
-
-The same call on the small example file shipped with the package (it holds
-only a small square of a slide, while the mask covers the whole slide):
+We read the small example file shipped with the package (it holds only a
+small square of a slide, while the mask covers the whole slide):
 
 ```{r}
 #| label: read-example
@@ -87,18 +67,7 @@ Whole slides have up to millions of cells. We keep only neoplastic and
 stromal cells and reduce each type separately with uniform thinning, which
 leaves the L-cross function unchanged (see the "Downsampling" vignette).
 
-On the HPC:
-
-```{r}
-#| label: hpc-downsampling
-#| eval: false
-
-set.seed(10)
-ppp_sub <- downsample(pp_object, method = "uniform", n_target = 40000,
-                      marks = c("neoplastic", "stromal"), by_marks = TRUE)
-```
-
-On the example crop, with a smaller target:
+On the example crop:
 
 ```{r}
 #| label: downsampling
@@ -129,15 +98,6 @@ Lcross_neoStroma <- Lcross(
 plot(Lcross_neoStroma, . - r ~ r, main = "L-cross neoplastic - stromal")
 ```
 
-On the HPC the result of each slide is saved to disk:
-
-```{r}
-#| label: hpc-save-output
-#| eval: false
-
-saveRDS(Lcross_neoStroma, file = save_path)
-```
-
 ## Several slides
 
 For the functional analysis we need one curve per slide, all on the same
@@ -159,20 +119,6 @@ L_list <- lapply(subs, function(x) {
 
 Lcross_table <- data.frame(r_value = r_values, L_list, check.names = FALSE)
 head(Lcross_table[, 1:4])
-```
-
-On the HPC, the saved `.rds` files are combined in the same way:
-
-```{r}
-#| label: hpc-combine
-#| eval: false
-
-files <- list.files(save_dir, pattern = "\\.rds$", full.names = TRUE)
-L_list <- lapply(files, function(f) readRDS(f)$border)
-names(L_list) <- sub("\\.rds$", "", basename(files))
-Lcross_table <- data.frame(r_value = r_values, L_list, check.names = FALSE)
-data.table::fwrite(Lcross_table,
-                   "/projects/shared/TCGA_data/results/combined_Lcross.csv")
 ```
 
 ```{r}

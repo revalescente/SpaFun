@@ -165,7 +165,7 @@ test_that("read_cells_h5ad and ann2ppp read h5ad and h5ad.gz", {
   expect_s3_class(pp, "ppp")
   expect_equal(npoints(pp), n)
 
-  # uncompressed HDF5 with a ".gz" name (as in the TCGA files)
+  # uncompressed HDF5 with a ".gz" name (some h5ad files are shipped so)
   fake_gz <- paste0(tempfile(), ".h5ad.gz")
   file.copy(f, fake_gz)
   expect_equal(nrow(read_cells_h5ad(fake_gz)), n)

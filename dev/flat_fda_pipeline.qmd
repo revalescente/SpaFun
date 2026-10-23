@@ -30,23 +30,9 @@ library(tidyr)
 ## Data Loading
 
 The input is a table with the column `r_value` and one column per slide with
-its L-cross function (see the "Lcross pipeline" vignette). On the HPC it is
-read from disk:
-
-```{r}
-#| label: hpc-load-data
-#| eval: false
-
-input_file <- "/projects/shared/TCGA_data/results/combined_Lcross.csv"
-
-message("Reading data from: ", input_file)
-dt <- fread(input_file)
-message("Successfully loaded data with ", nrow(dt), " rows and ", ncol(dt), " columns.")
-```
-
-Here we build it from the 5 example crops in `tcga_crops`, so this vignette
-runs anywhere. With only 5 curves the analysis below is a demonstration:
-the full analysis uses all the TCGA slides.
+its L-cross function (see the "Lcross pipeline" vignette). Here we build it
+from the 5 example crops in `tcga_crops`. With only 5 curves the analysis
+below is a demonstration.
 
 ```{r}
 #| label: load-data
@@ -69,7 +55,7 @@ dim(dt)
 
 We apply `funSmooth()` to convert the raw data points into a continuous
 functional data object (penalised B-splines, see `?funSmooth`). The
-coordinates of the TCGA slides are pixels at 40x: with `to_micron = TRUE`
+coordinates of the example crops are pixels at 40x: with `to_micron = TRUE`
 and `magnif = 40` the grid `r` and the L values (lengths) are converted to
 microns, assuming 0.25 micron/pixel at 40x (`mpp_ref`; set `mpp` if the
 scanner resolution is known).
@@ -86,13 +72,13 @@ smoothed_Lfun
 
 We perform Functional PCA on the smoothed $L$-functions. The number of
 harmonics cannot exceed the number of curves: we use 3 with the 5 example
-curves (10 on the full TCGA data).
+curves.
 
 ```{r}
 #| label: fpca-analysis
 
 # Run fPCA
-n_harm <- min(10, ncol(dt) - 2)
+n_harm <- 3
 fpca <- pca.fd(smoothed_Lfun$fd, nharm = n_harm, smoothed_Lfun$fdPar)
 
 # Assign sample names (excluding the 'r_values' column) to the PCA scores
@@ -102,8 +88,7 @@ rownames(fpca$scores) <- colnames(dt)[-1]
 ## Unsupervised Clustering
 
 We apply two clustering techniques to the scores of the first two
-principal components. On the full data we look for 6 groups; with the 5
-example curves we use 2.
+principal components. With the 5 example curves we look for 2 groups.
 
 ### K-means & Hierarchical Clustering
 
@@ -113,8 +98,8 @@ example curves we use 2.
 # Set seed for reproducibility
 set.seed(123)
 
-# number of groups: 6 on the full data, fewer with the example curves
-k <- min(6, nrow(fpca$scores) - 3)
+# number of groups
+k <- 2
 
 # K-means clustering
 fpca_km <- kmeans(fpca$scores[, 1:2], centers = k)
